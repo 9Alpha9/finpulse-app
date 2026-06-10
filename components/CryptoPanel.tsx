@@ -17,6 +17,7 @@ import {
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import {
   fetchCryptoPrice,
+  fetchAllCryptoKlines,
   connectCryptoWebSocket,
   fetchActiveCryptoPairs,
   KlineData,
@@ -140,75 +141,9 @@ const getIntervalStartTimestamp = (intervalStr: string): number => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Binance API — fetch ALL historical klines dengan paginasi
+// Binance API — gunakan fetchAllCryptoKlines dari @/src/lib/binance
+// (menggunakan api.binance.info agar tidak diblokir ISP Indonesia)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Ambil SEMUA candle dari Binance mulai sejak awal listing coin
- * hingga sekarang, menggunakan loop paginasi 1000 candle per request.
- *
- * Binance membatasi 1000 candle per request, jadi kita loop mundur
- * menggunakan `endTime` sampai tidak ada data lagi.
- */
-async function fetchAllKlines(
-  symbol: string,
-  interval: string,
-  onProgress?: (count: number) => void
-): Promise<KlineData[]> {
-  const BASE = "https://api.binance.com/api/v3/klines";
-  const LIMIT = 1000;
-  const all: KlineData[] = [];
-
-  let endTime: number | null = null; // null = mulai dari sekarang
-
-  // Batas pengaman: maksimal 200 batch (= 200.000 candle)
-  // untuk hindari infinite loop pada interval kecil (1s, 1m)
-  const MAX_BATCHES = 200;
-  let batchCount = 0;
-
-  while (batchCount < MAX_BATCHES) {
-    let url = `${BASE}?symbol=${symbol}&interval=${interval}&limit=${LIMIT}`;
-    if (endTime !== null) url += `&endTime=${endTime}`;
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
-
-    const raw: any[][] = await res.json();
-    if (!raw || raw.length === 0) break;
-
-    // Binance mengembalikan [openTime, open, high, low, close, ...]
-    const batch: KlineData[] = raw.map((k) => ({
-      time: Math.floor(Number(k[0]) / 1000) as any,
-      open: parseFloat(k[1]),
-      high: parseFloat(k[2]),
-      low: parseFloat(k[3]),
-      close: parseFloat(k[4]),
-    }));
-
-    // Sisipkan di depan (data lama di awal)
-    all.unshift(...batch);
-    onProgress?.(all.length);
-
-    // Jika dapat < LIMIT, berarti sudah sampai data paling awal
-    if (raw.length < LIMIT) break;
-
-    // Geser endTime ke openTime candle pertama di batch ini - 1ms
-    endTime = Number(raw[0][0]) - 1;
-    batchCount++;
-  }
-
-  // Deduplikasi dan sort ascending berdasarkan time
-  const seen = new Set<number>();
-  const unique = all.filter((k) => {
-    const t = Number(k.time);
-    if (seen.has(t)) return false;
-    seen.add(t);
-    return true;
-  });
-  unique.sort((a, b) => Number(a.time) - Number(b.time));
-
-  return unique;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CoinIcon
@@ -427,7 +362,7 @@ export default function CryptoPanel() {
         // Fetch harga saat ini secara paralel
         const [price, klines] = await Promise.all([
           fetchCryptoPrice(symbol),
-          fetchAllKlines(symbol, interval, (count) => {
+          fetchAllCryptoKlines(symbol, interval, (count) => {
             if (active) setLoadingProgress(count);
           }),
         ]);

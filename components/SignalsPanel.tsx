@@ -15,7 +15,7 @@ export default function SignalsPanel() {
   const [takeProfit, setTakeProfit] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [dca, setDca] = useState<"off" | "daily" | "weekly" | "monthly">("off");
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -77,7 +77,7 @@ export default function SignalsPanel() {
 
   return (
     <div className="space-y-6">
-      
+
       {/* Premium Alert Indicator Banner */}
       {!isPremium && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 flex items-start gap-4 animate-in fade-in duration-200">
@@ -87,7 +87,7 @@ export default function SignalsPanel() {
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               Anda saat ini terdaftar di paket **Free**. Sinyal otomatis melalui WhatsApp, Take Profit/Stop Loss real-time alerts, dan notifikasi DCA mingguan hanya tersedia untuk pengguna **Premium**.
             </p>
-            <button 
+            <button
               onClick={() => setSubscriptionTier("premium")}
               className="mt-3.5 rounded-full bg-brand-green py-2 px-5 text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer"
             >
@@ -105,7 +105,7 @@ export default function SignalsPanel() {
         </div>
 
         <form onSubmit={handleSave} className="space-y-5">
-          
+
           {/* Form Overlay in case of Free Tier */}
           {!isPremium && (
             <div className="absolute inset-x-0 bottom-0 top-14 z-20 bg-card/60 backdrop-blur-2xs cursor-not-allowed select-none" />
@@ -183,7 +183,7 @@ export default function SignalsPanel() {
           {/* Status Message */}
           <AnimatePresence>
             {successMsg && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -195,7 +195,7 @@ export default function SignalsPanel() {
             )}
 
             {errorMsg && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -234,7 +234,7 @@ export default function SignalsPanel() {
         <div className="space-y-1">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Peringatan Risiko & Disclaimer Legal</h4>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Semua pemberitahuan sinyal, alert Take Profit (TP), dan rekomendasi DCA yang dihasilkan oleh **ArthaVerse** didasarkan pada kalkulasi algoritma statistik komputer yang bersifat probabilitas. Sinyal ini **BUKAN** merupakan jaminan keuntungan absolut, melainkan probabilitas matematika semata. ArthaVerse tidak bertanggung jawab atas kerugian modal yang dialami pengguna. Pengguna wajib melakukan analisis fundamental dan teknikal mandiri (*Do Your Own Research - DYOR*) sebelum melakukan aksi beli atau jual aset di pasar keuangan.
+            Semua pemberitahuan sinyal, alert Take Profit (TP), dan rekomendasi DCA yang dihasilkan oleh **FinPulse** didasarkan pada kalkulasi algoritma statistik komputer yang bersifat probabilitas. Sinyal ini **BUKAN** merupakan jaminan keuntungan absolut, melainkan probabilitas matematika semata. ArthaVerse tidak bertanggung jawab atas kerugian modal yang dialami pengguna. Pengguna wajib melakukan analisis fundamental dan teknikal mandiri (*Do Your Own Research - DYOR*) sebelum melakukan aksi beli atau jual aset di pasar keuangan.
           </p>
         </div>
       </div>

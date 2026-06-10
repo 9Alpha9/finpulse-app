@@ -31,7 +31,7 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
   const [symbol, setSymbol] = useState("");
   const [amount, setAmount] = useState("");
   const [avgBuyPrice, setAvgBuyPrice] = useState("");
-  
+
   // Background live prices for all portfolio items
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
         setLivePrices(prices);
       }
     }
-    
+
     if (items.length > 0) {
       fetchBackgroundPrices();
     }
@@ -240,10 +240,10 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
             {items.length > 0 ? (
               items.map((item) => {
                 const livePrice = livePrices[item.symbol] !== undefined ? livePrices[item.symbol] : null;
-                
+
                 let pnlAbs = 0;
                 let pnlPercent = 0;
-                
+
                 if (livePrice !== null) {
                   pnlAbs = (livePrice - item.avgBuyPrice) * item.amount;
                   pnlPercent = ((livePrice - item.avgBuyPrice) / item.avgBuyPrice) * 100;
@@ -255,9 +255,8 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
                   <tr key={item.id} className="hover:bg-muted/10 transition">
                     <td className="py-2.5 font-bold text-foreground">
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase select-none ${
-                          item.type === "crypto" ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500"
-                        }`}>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase select-none ${item.type === "crypto" ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500"
+                          }`}>
                           {item.type === "crypto" ? "C" : "S"}
                         </span>
                         <span>{item.symbol}</span>
@@ -317,7 +316,7 @@ export function SignalConfigurator({ activeSymbol, currentPrice }: SignalConfigu
   // Load signal config for the active symbol on change
   useEffect(() => {
     setSaveSuccess(false);
-    const savedSignals = localStorage.getItem("arthaverse_signals");
+    const savedSignals = localStorage.getItem("finpulse_signals");
     if (savedSignals) {
       try {
         const parsed = JSON.parse(savedSignals);
@@ -342,9 +341,9 @@ export function SignalConfigurator({ activeSymbol, currentPrice }: SignalConfigu
     e.preventDefault();
     setSaveSuccess(false);
 
-    const savedSignals = localStorage.getItem("arthaverse_signals") || "{}";
+    const savedSignals = localStorage.getItem("finpulse_signals") || "{}";
     let parsed: Record<string, SignalSettings> = {};
-    
+
     try {
       parsed = JSON.parse(savedSignals);
     } catch (e) {
@@ -357,7 +356,7 @@ export function SignalConfigurator({ activeSymbol, currentPrice }: SignalConfigu
       dca: dcaPrice.trim(),
     };
 
-    localStorage.setItem("arthaverse_signals", JSON.stringify(parsed));
+    localStorage.setItem("finpulse_signals", JSON.stringify(parsed));
     setSaveSuccess(true);
 
     // Auto fade alert toast
