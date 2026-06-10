@@ -189,7 +189,7 @@ function AddPositionModal({ onClose, onAdd }: {
             className={`flex-1 rounded-md py-1.5 transition cursor-pointer ${market === "crypto" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
           >Kripto</button>
           <button
-            onClick={() => { setMarket("stocks"); setSymbol("BBCA"); setSearch(""); }}
+            onClick={() => { setMarket("stocks"); setSymbol("IHSG"); setSearch(""); }}
             className={`flex-1 rounded-md py-1.5 transition cursor-pointer ${market === "stocks" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
           >IDX Saham</button>
         </div>

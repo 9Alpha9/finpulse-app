@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingDown,
   Minus,
+  AlertCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -206,6 +207,7 @@ export default function NewsPanel() {
     } catch (err: any) {
       console.error("[NewsPanel]", err);
       setError("Gagal memuat berita. Coba refresh.");
+      // Fallback Dummy Data jika error
       setNews([
         { guid: "fb-1", title: "Bitcoin Holds Near $68K as Macro Uncertainty Lingers", link: "https://www.coindesk.com", pubDate: new Date().toISOString(), description: "Bitcoin consolidates around the $68,000 range as global macro headwinds and upcoming Fed minutes keep traders cautious.", source: "CoinDesk", region: "global", lang: "en", category: "crypto", sentiment: "neutral" },
         { guid: "fb-2", title: "IHSG Ditutup Menguat Ditopang Sentimen Suku Bunga BI", link: "https://www.cnbcindonesia.com/market", pubDate: new Date().toISOString(), description: "IHSG mencatatkan penguatan tipis seiring investor menyerap sinyal stabilitas makroekonomi domestik dan potensi pelonggaran suku bunga BI.", source: "CNBC Indonesia", region: "id", lang: "id", category: "stocks", sentiment: "positive" },
@@ -226,7 +228,8 @@ export default function NewsPanel() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    // Kita ubah ketinggian container utama ini menjadi flex agar sisa halamannya menempati tinggi maksimum dengan benar
+    <div className="flex flex-col gap-4 h-screen max-h-screen">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0">
@@ -248,13 +251,14 @@ export default function NewsPanel() {
             </div>
           </div>
 
+          {/* Tombol Refresh yang dimodifikasi ukurannya agar lebih pas */}
           <button
             onClick={() => fetchNews(activeFilter)}
             disabled={isLoading}
             title="Refresh berita"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition cursor-pointer disabled:opacity-50 shrink-0"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card p-2 sm:px-3 sm:py-1.5 text-[10px] font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition cursor-pointer disabled:opacity-50 shrink-0"
           >
-            <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 sm:h-3 sm:w-3 ${isLoading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
@@ -283,12 +287,23 @@ export default function NewsPanel() {
       {/* ── Error ───────────────────────────────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl px-4 py-3 text-xs font-medium shrink-0">
-          ⚠️ {error}
+          <AlertCircle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}
 
-      {/* ── News Feed ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto pr-0.5 space-y-3 scrollbar-thin pb-2">
+      {/* ── News Feed (Scrollable Container) ────────────────────────────────── */}
+      {/* PENTING: Tambahkan inline style untuk menyembunyikan scrollbar bawaan browser */}
+      <div
+        className="flex-1 overflow-y-auto space-y-3 pb-2"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          .flex-1::-webkit-scrollbar {
+            display: none;
+          }
+        `}} />
+
         {isLoading ? (
           <div className="flex flex-col h-48 items-center justify-center gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin text-brand-green" />

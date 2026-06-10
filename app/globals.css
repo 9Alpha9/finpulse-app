@@ -1,36 +1,46 @@
 @import "tailwindcss";
 
+
+@media (min-width: 1024px) {
+
+  html,
+  body {
+    overflow: hidden !important;
+    height: 100vh;
+  }
+}
+
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
-  
+
   --card: #ffffff;
   --card-foreground: #0f172a;
-  
+
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  
+
   --primary: #0f172a;
   --primary-foreground: #f8fafc;
-  
+
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
-  
+
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  
+
   --accent: #e2e8f0;
   --accent-foreground: #0f172a;
-  
+
   --destructive: #ef4444;
   --destructive-foreground: #f8fafc;
-  
+
   --border: #e2e8f0;
   --input: #e2e8f0;
   --ring: #0f172a;
-  
+
   --radius: 1rem;
-  
+
   /* Savexa Financial Accents */
   --brand-green: #0d9488;
   --brand-green-light: #ccfbf1;
@@ -39,32 +49,32 @@
 .dark {
   --background: #090d16;
   --foreground: #f1f5f9;
-  
+
   --card: #111827;
   --card-foreground: #f1f5f9;
-  
+
   --popover: #111827;
   --popover-foreground: #f1f5f9;
-  
+
   --primary: #f8fafc;
   --primary-foreground: #0f172a;
-  
+
   --secondary: #1f2937;
   --secondary-foreground: #f8fafc;
-  
+
   --muted: #1f2937;
   --muted-foreground: #94a3b8;
-  
+
   --accent: #374151;
   --accent-foreground: #f8fafc;
-  
+
   --destructive: #7f1d1d;
   --destructive-foreground: #f8fafc;
-  
+
   --border: #1f2937;
   --input: #1f2937;
   --ring: #94a3b8;
-  
+
   --brand-green: #14b8a6;
   --brand-green-light: #115e59;
 }
@@ -89,20 +99,27 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  
+
   --color-brand-green: var(--brand-green);
   --color-brand-green-light: var(--brand-green-light);
-  
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 }
 
-*, ::before, ::after, ::backdrop {
+*,
+::before,
+::after,
+::backdrop {
   border-color: var(--border);
 }
 
-button, a, select, input[type="submit"], [role="button"] {
+button,
+a,
+select,
+input[type="submit"],
+[role="button"] {
   cursor: pointer;
 }
 
@@ -117,13 +134,16 @@ body {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
 }
+
 .dark ::-webkit-scrollbar-thumb {
   background: #475569;
 }

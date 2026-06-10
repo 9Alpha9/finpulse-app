@@ -27,6 +27,7 @@ export interface StockInfo {
 
 // Daftar saham pilihan (LQ45 & Blue Chip Indonesia)
 export const stockTickers: Record<string, Omit<StockInfo, "price" | "change" | "changePercent" | "prevClose">> = {
+  IHSG: { symbol: "^JKSE", name: "IHSG (Composite Index)", sector: "Market Index", logo: "", peRatio: "-", dividendYield: "-", marketCap: "Rp 11.500 T", volume: "21.5B" },
   BBCA: { symbol: "BBCA", name: "Bank Central Asia Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/e/fc/Logo_Bank_Central_Asia.svg/1200px-Logo_Bank_Central_Asia.svg.png", peRatio: "24.5x", dividendYield: "2.1%", marketCap: "Rp 1.263 T", volume: "82.4M" },
   BBRI: { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/f/f3/Bank_Rakyat_Indonesia_logo.svg/1200px-Bank_Rakyat_Indonesia_logo.svg.png", peRatio: "14.8x", dividendYield: "4.8%", marketCap: "Rp 718 T", volume: "125.1M" },
   BMRI: { symbol: "BMRI", name: "Bank Mandiri Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/a/ad/Bank_Mandiri_logo_2016.svg/1200px-Bank_Mandiri_logo_2016.svg.png", peRatio: "11.5x", dividendYield: "5.2%", marketCap: "Rp 582 T", volume: "61.3M" },
@@ -42,7 +43,7 @@ export const stockTickers: Record<string, Omit<StockInfo, "price" | "change" | "
 
 // Seed data harga untuk simulasi (Base Price dalam Rupiah)
 const basePrices: Record<string, number> = {
-  BBCA: 10250, BBRI: 4820, BMRI: 6150, TLKM: 3820, ASII: 5225,
+  IHSG: 7250, BBCA: 10250, BBRI: 4820, BMRI: 6150, TLKM: 3820, ASII: 5225,
   BBNI: 5100, ICBP: 10450, UNVR: 3650, GOTO: 65, KLBF: 1650, WBSA: 468,
 };
 
@@ -92,8 +93,12 @@ export function fetchStockKlinesMock(symbol: string, interval: string, limit = 2
   return klines;
 }
 
+export function getYahooTicker(symbol: string): string {
+  return (symbol === "IHSG" || symbol === "^JKSE") ? "^JKSE" : (symbol.endsWith(".JK") ? symbol : `${symbol}.JK`);
+}
+
 export async function fetchStockPriceFromYahoo(symbol: string): Promise<number> {
-  const ticker = symbol.endsWith(".JK") ? symbol : `${symbol}.JK`;
+  const ticker = getYahooTicker(symbol);
   const res = await fetch(`/api/stocks?symbol=${ticker}&interval=1d`);
   if (!res.ok) return getStockInfo(symbol).price; // Fallback ke mock
   const data = await res.json();
@@ -101,9 +106,10 @@ export async function fetchStockPriceFromYahoo(symbol: string): Promise<number> 
 }
 
 export async function fetchStockKlinesFromYahoo(symbol: string, interval: string, limit = 200): Promise<StockKline[]> {
-  const ticker = symbol.endsWith(".JK") ? symbol : `${symbol}.JK`;
+  const ticker = getYahooTicker(symbol);
   const res = await fetch(`/api/stocks?symbol=${ticker}&interval=${interval}`);
   if (!res.ok) return fetchStockKlinesMock(symbol, interval, limit); // Fallback ke mock
   const data = await res.json();
-  return data.klines?.slice(-limit) || fetchStockKlinesMock(symbol, interval, limit);
+  const finalLimit = (symbol === "IHSG" || symbol === "^JKSE") ? Math.max(limit, 100000) : limit;
+  return data.klines?.slice(-finalLimit) || fetchStockKlinesMock(symbol, interval, limit);
 }

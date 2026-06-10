@@ -67,7 +67,13 @@ export async function GET(req: NextRequest) {
         yahooRange = "max";
     }
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${yahooInterval}&range=${yahooRange}`;
+    let url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${yahooInterval}`;
+    if (yahooRange === "max") {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      url += `&period1=0&period2=${nowSeconds}`;
+    } else {
+      url += `&range=${yahooRange}`;
+    }
 
     const res = await fetch(url, {
       headers: {

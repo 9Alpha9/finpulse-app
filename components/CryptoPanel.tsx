@@ -25,8 +25,6 @@ import {
 import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
-import TechnicalsGauge from "@/components/TechnicalsGauge";
-import { div } from "framer-motion/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -171,6 +169,10 @@ const CoinIcon = ({
 // TimeframeDropdown
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TimeframeDropdown (Responsif Mobile & Desktop)
+// ─────────────────────────────────────────────────────────────────────────────
+
 const TimeframeDropdown = ({
   value,
   onChange,
@@ -180,9 +182,9 @@ const TimeframeDropdown = ({
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
   const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
 
+  // Tutup dropdown jika klik di luar (khusus untuk mode Desktop)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -191,55 +193,79 @@ const TimeframeDropdown = ({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Kunci scroll layar utama saat pop-up terbuka di mobile
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => { document.body.style.overflow = "unset"; };
+  }, [open]);
+
   return (
     <div className="relative" ref={ref}>
+      {/* Tombol Pemicu */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[88px] justify-between"
+        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
       >
         <span className="text-brand-green">{selected?.label ?? value}</span>
-        <ChevronDown
-          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        />
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
 
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.14 }}
-            className="absolute left-0 mt-1.5 w-64 rounded-xl border border-border bg-card shadow-xl p-2 z-50"
-          >
-            {TIMEFRAME_GROUPS.map((group) => (
-              <div key={group.group} className="mb-2 last:mb-0">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                  {group.group}
+          <>
+            {/* Latar Belakang Hitam Transparan (HANYA MUNCUL DI MOBILE) */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
+              onClick={() => setOpen(false)}
+            />
+
+            {/* Panel Pilihan (Bottom Sheet di Mobile, Dropdown di Desktop) */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 30 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-2 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-xl sm:absolute sm:inset-auto sm:left-0 sm:mt-1.5 sm:w-64 max-h-[85vh] sm:max-h-[60vh] overflow-y-auto pb-8 sm:pb-2"
+            >
+              {/* Garis Handle Tarik (Hanya visual untuk estetika Mobile) */}
+              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden" />
+
+              {TIMEFRAME_GROUPS.map((group) => (
+                <div key={group.group} className="mb-4 sm:mb-2 last:mb-0">
+                  {/* Judul Kategori */}
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1 sm:mb-0">
+                    {group.group}
+                  </div>
+
+                  {/* Kotak Pilihan */}
+                  <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 sm:gap-1">
+                    {group.items.map((item) => {
+                      const isActive = item.value === value;
+                      return (
+                        <button
+                          key={item.value}
+                          onClick={() => { onChange(item.value); setOpen(false); }}
+                          className={`rounded-lg sm:rounded-md py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
+                            ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
+                            : "text-foreground bg-secondary/30 sm:bg-transparent hover:bg-secondary"
+                            }`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 gap-1">
-                  {group.items.map((item) => {
-                    const isActive = item.value === value;
-                    return (
-                      <button
-                        key={item.value}
-                        onClick={() => {
-                          onChange(item.value);
-                          setOpen(false);
-                        }}
-                        className={`rounded-md py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
-                          ? "bg-brand-green text-white shadow-sm shadow-brand-green/30"
-                          : "text-foreground hover:bg-secondary"
-                          }`}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </motion.div>
+              ))}
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>
@@ -276,8 +302,8 @@ export default function CryptoPanel() {
   const lastBarRef = useRef<KlineData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const klineCache = useRef<Map<string, KlineData[]>>(new Map());
+  const resizeHandlerRef = useRef<(() => void) | null>(null);
 
-  // PERBAIKAN ANIMASI TRADINGVIEW: 
   // Menyimpan arah tick transaksi *terakhir*.
   const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
   const prevPriceRef = useRef<number>(currentPrice);
@@ -288,7 +314,6 @@ export default function CryptoPanel() {
     } else if (currentPrice < prevPriceRef.current && prevPriceRef.current !== 0) {
       setTickDirection("down");
     }
-    // Jika harga sama, pertahankan warna terakhir.
     if (currentPrice > 0) {
       prevPriceRef.current = currentPrice;
     }
@@ -364,7 +389,7 @@ export default function CryptoPanel() {
       setLoadingMore(false);
       setCurrentPrice(0);
       setPriceChange(0);
-      setTickDirection("neutral"); // Reset warna saat ganti koin
+      setTickDirection("neutral");
 
       if (candlestickSeriesRef.current) {
         candlestickSeriesRef.current.setData([]);
@@ -497,13 +522,16 @@ export default function CryptoPanel() {
     };
 
     if (!chartRef.current) {
+      // 1. Ambil lebar dan tinggi dinamis CSS
       const width = container.clientWidth;
-      if (width <= 0) return;
+      const height = container.clientHeight;
 
-      const chart = createChart(container, { width, height: 320, ...chartOptions });
+      if (width <= 0 || height <= 0) return;
+
+      const chart = createChart(container, { width, height, ...chartOptions });
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: "#089981", // TradingView Green
-        downColor: "#f23645", // TradingView Red
+        upColor: "#089981", // Warna Hijau TradingView
+        downColor: "#f23645", // Warna Merah TradingView
         borderVisible: false,
         wickUpColor: "#089981",
         wickDownColor: "#f23645",
@@ -512,11 +540,21 @@ export default function CryptoPanel() {
       chartRef.current = chart;
       candlestickSeriesRef.current = series;
 
+      // 2. Gunakan handleResize dinamis
       const handleResize = () => {
-        chartRef.current?.resize(container.clientWidth, 320);
+        chartRef.current?.resize(container.clientWidth, container.clientHeight);
       };
+      resizeHandlerRef.current = handleResize;
       window.addEventListener("resize", handleResize);
-      (chartRef.current as any).__handleResize = handleResize;
+
+      // Hilangkan watermark logo TV menggunakan DOM API jika ada
+      const style = document.createElement("style");
+      style.innerHTML = `
+        .tv-lightweight-charts table tr td:nth-child(2) div[style*="z-index: 2"] {
+          display: none !important;
+        }
+      `;
+      document.head.appendChild(style);
 
     } else {
       chartRef.current.applyOptions(chartOptions);
@@ -525,9 +563,10 @@ export default function CryptoPanel() {
 
   useEffect(() => {
     return () => {
+      if (resizeHandlerRef.current) {
+        window.removeEventListener("resize", resizeHandlerRef.current);
+      }
       if (chartRef.current) {
-        const h = (chartRef.current as any).__handleResize;
-        if (h) window.removeEventListener("resize", h);
         chartRef.current.remove();
         chartRef.current = null;
         candlestickSeriesRef.current = null;
@@ -604,7 +643,6 @@ export default function CryptoPanel() {
   return (
     <div className="space-y-6">
 
-      {/* Error Banner */}
       {errorBanner && (
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-amber-500 text-xs">
           <AlertCircle className="h-5 w-5 shrink-0" />
@@ -612,75 +650,72 @@ export default function CryptoPanel() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-4">
-          <CoinIcon base={getSymbolBase(symbol)} className="h-12 w-12" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-foreground">
+      {/* Header Info - Responsif Mobile Sama dengan StocksPanel */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
+
+        <div className="flex items-start md:items-center gap-3 md:gap-4 w-full md:w-auto border-b border-border/40 md:border-none pb-4 md:pb-0">
+          <CoinIcon base={getSymbolBase(symbol)} className="h-10 w-10 md:h-12 md:w-12 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg md:text-xl font-bold text-foreground truncate max-w-full">
                 {getSymbolBase(symbol)} / USDT
               </h2>
-              <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+              <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] sm:text-xs font-semibold text-muted-foreground whitespace-nowrap">
                 Crypto
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">
               Binance REST + Live WebSocket Stream
             </p>
           </div>
         </div>
-        <div className="flex items-baseline gap-6 text-right">
+
+        <div className="flex items-baseline justify-between md:justify-end w-full md:w-auto gap-4 md:gap-6 text-left md:text-right pt-2 md:pt-0">
           <div>
-            <div className="text-sm font-semibold text-muted-foreground mb-1">Harga Live</div>
+            <div className="text-[10px] sm:text-sm font-semibold text-muted-foreground mb-1">Harga Realtime</div>
             <motion.h3
               animate={{
                 color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : (theme === "dark" ? "#f8fafc" : "#0f172a"),
               }}
               transition={{ duration: 0.1 }}
-              className="text-2xl font-extrabold tracking-tight px-1 py-0.5"
+              className="text-lg sm:text-2xl font-extrabold tracking-tight px-1 py-0.5"
             >
               {currentPrice === 0
                 ? <span className="text-muted-foreground animate-pulse">···</span>
                 : `$${formatPrice(currentPrice)}`}
             </motion.h3>
           </div>
-          {/* BLOK PERUBAHAN 24J */}
-          <div>
-            <div className="text-sm font-semibold text-muted-foreground mb-1">Perubahan 24j</div>
+          <div className="text-right">
+            <div className="text-[10px] sm:text-sm font-semibold text-muted-foreground mb-1">Perubahan 24j</div>
             <div
-              className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-[#089981]" : "text-[#f23645]"
-                }`}
+              className={`flex items-center gap-0.5 text-xs sm:text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}
             >
-              {priceChange >= 0
-                ? <ArrowUpRight className="h-4 w-4" />
-                : <ArrowDownRight className="h-4 w-4" />}
+              {priceChange >= 0 ? <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ArrowDownRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               <span>{priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%</span>
             </div>
           </div>
         </div>
+
       </div>
 
       {/* Chart Card */}
-      <div className="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="relative rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
 
-        {/* Controls Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4 mb-6 z-40 relative">
-          <div className="flex items-center gap-3 flex-wrap">
+        {/* Controls Bar - Responsif Mobile */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 md:pb-4 mb-4 md:mb-6 z-40 relative">
 
+          <div className="flex items-center gap-2 flex-1 md:flex-none">
             {/* Coin Selector */}
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative flex-1 md:flex-none" ref={dropdownRef}>
               <button
                 onClick={() => setIsSelectOpen(!isSelectOpen)}
-                className="flex items-center justify-between gap-3 w-44 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none"
+                className="flex items-center justify-between gap-2 w-full md:w-48 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs sm:text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none"
               >
-                <div className="flex items-center gap-2">
-                  <CoinIcon base={getSymbolBase(symbol)} className="h-5 w-5" />
-                  <span>{getSymbolBase(symbol)}/USDT</span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <CoinIcon base={getSymbolBase(symbol)} className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+                  <span className="truncate">{getSymbolBase(symbol)}/USDT</span>
                 </div>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition duration-200 ${isSelectOpen ? "rotate-180" : ""}`}
-                />
+                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition duration-200 shrink-0 ${isSelectOpen ? "rotate-180" : ""}`} />
               </button>
 
               <AnimatePresence>
@@ -690,7 +725,7 @@ export default function CryptoPanel() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-0 mt-1.5 w-60 rounded-xl border border-border bg-card shadow-lg p-2.5 z-50 space-y-2 max-h-80 overflow-hidden flex flex-col"
+                    className="absolute left-0 mt-1.5 w-[240px] sm:w-60 rounded-xl border border-border bg-card shadow-lg p-2.5 z-50 max-h-80 overflow-hidden flex flex-col"
                   >
                     <div className="relative flex items-center shrink-0">
                       <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -702,7 +737,7 @@ export default function CryptoPanel() {
                         className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
                       />
                     </div>
-                    <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 scrollbar-thin">
+                    <div className="flex-1 overflow-y-auto mt-2 space-y-0.5 pr-1 scrollbar-thin">
                       {filteredPairs.length > 0 ? (
                         filteredPairs.map((pair) => {
                           const base = getSymbolBase(pair);
@@ -710,30 +745,22 @@ export default function CryptoPanel() {
                           return (
                             <button
                               key={pair}
-                              onClick={() => {
-                                setSymbol(pair);
-                                setIsSelectOpen(false);
-                                setSearchQuery("");
-                              }}
+                              onClick={() => { setSymbol(pair); setIsSelectOpen(false); setSearchQuery(""); }}
                               className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
                                 ? "bg-brand-green/10 text-brand-green font-bold"
                                 : "text-foreground hover:bg-secondary"
                                 }`}
                             >
-                              <div className="flex items-center gap-2">
-                                <CoinIcon base={base} className="h-4 w-4" />
-                                <span>{base} / USDT</span>
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <CoinIcon base={base} className="h-4 w-4 shrink-0" />
+                                <span className="truncate">{base} / USDT</span>
                               </div>
-                              {isSelected && (
-                                <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
-                              )}
+                              {isSelected && <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />}
                             </button>
                           );
                         })
                       ) : (
-                        <div className="text-[10px] text-muted-foreground text-center py-4">
-                          Koin tidak ditemukan
-                        </div>
+                        <div className="text-[10px] text-muted-foreground text-center py-4">Koin tidak ditemukan</div>
                       )}
                     </div>
                   </motion.div>
@@ -741,92 +768,72 @@ export default function CryptoPanel() {
               </AnimatePresence>
             </div>
 
-            {/* Timeframe Dropdown */}
-            <TimeframeDropdown
-              value={interval}
-              onChange={(v) => setIntervalState(v)}
-            />
+            <TimeframeDropdown value={interval} onChange={(v) => setIntervalState(v)} />
+          </div>
 
-            {/* Live / Delayed badge */}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end mt-1 md:mt-0">
             {isPremium ? (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full select-none">
-                <Zap className="h-3 w-3 fill-current animate-pulse" /> LIVE
+              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 sm:py-0.5 rounded-full select-none whitespace-nowrap">
+                <Zap className="h-3 w-3 fill-current animate-pulse" /> Data Realtime
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded-full select-none">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2.5 py-1 sm:py-0.5 rounded-full select-none whitespace-nowrap">
                 <Clock className="h-3 w-3" /> DELAYED FEED
               </span>
             )}
-          </div>
 
-          {/* Candle count + background history indicator */}
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground select-none">
-            {!isLoadingChart && chartData.length > 0 && (
-              <>
-                <History className="h-3 w-3" />
-                <span>{chartData.length.toLocaleString("id-ID")} candle</span>
-              </>
-            )}
-            {loadingMore && (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-brand-green/70 bg-brand-green/10 px-2 py-0.5 rounded-full animate-pulse">
-                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                memuat histori...
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-muted-foreground select-none">
+              {!isLoadingChart && chartData.length > 0 && (
+                <>
+                  <History className="h-3 w-3 hidden sm:block" />
+                  <span className="whitespace-nowrap">{chartData.length.toLocaleString("id-ID")} candle</span>
+                </>
+              )}
+              {loadingMore && (
+                <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold text-brand-green/70 bg-brand-green/10 px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> memuat...
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Chart Container */}
-        <div className="h-80 w-full relative z-10">
+        {/* Chart Container - Tinggi diatur statis di CSS, canvas mengikuti dari Javascript clientHeight */}
+        <div className="h-[250px] sm:h-[300px] w-full relative z-10">
 
-          {/* Free Tier Overlay */}
           {!isPremium && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-card/75 backdrop-blur-xs p-6 text-center select-none animate-in fade-in duration-200">
-              <ShieldAlert className="h-10 w-10 text-amber-500 mb-3" />
-              <h4 className="text-md font-bold text-foreground">
-                Grafik Real-Time Terkunci
-              </h4>
-              <p className="mt-1.5 text-xs text-muted-foreground max-w-sm leading-relaxed">
-                Anda menggunakan akun <strong>Free</strong>. Tingkatkan ke{" "}
-                <strong>Premium</strong> untuk membuka grafik kripto real-time
-                WebSocket dan signal WhatsApp.
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-card/80 backdrop-blur-xs p-4 sm:p-6 text-center select-none animate-in fade-in duration-200 rounded-xl">
+              <ShieldAlert className="h-8 w-8 sm:h-10 sm:w-10 text-amber-500 mb-2 sm:mb-3" />
+              <h4 className="text-sm sm:text-md font-bold text-foreground">Grafik Real-Time Terkunci</h4>
+              <p className="mt-1 sm:mt-1.5 text-[10px] sm:text-xs text-muted-foreground max-w-xs sm:max-w-sm leading-relaxed">
+                Anda menggunakan akun <strong>Free</strong>. Tingkatkan ke <strong>Premium</strong> untuk membuka grafik kripto real-time WebSocket.
               </p>
               <button
                 onClick={() => setSubscriptionTier("premium")}
-                className="mt-4 rounded-full bg-brand-green py-2 px-6 text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer"
+                className="mt-3 sm:mt-4 rounded-full bg-brand-green py-1.5 sm:py-2 px-4 sm:px-6 text-[10px] sm:text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer"
               >
                 UPGRADE KE PREMIUM
               </button>
             </div>
           )}
 
-          {/* Loading Overlay — hanya saat fetch batch pertama */}
           {isLoadingChart && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-20 bg-card rounded-xl">
-              <Loader2 className="h-7 w-7 animate-spin text-brand-green" />
-              <p className="text-xs text-muted-foreground font-semibold">Memuat grafik...</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-20 bg-card/80 backdrop-blur-xs rounded-xl">
+              <Loader2 className="h-6 w-6 sm:h-7 sm:w-7 animate-spin text-brand-green" />
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold">Memuat grafik...</p>
             </div>
           )}
 
-          {/* Chart Canvas */}
           <div
             ref={chartContainerRef}
-            className={`w-full h-80 ${isLoadingChart ? "invisible" : ""}`}
+            className={`w-full h-[250px] sm:h-[300px] ${isLoadingChart ? "invisible" : ""}`}
           />
         </div>
       </div>
 
-      {/* Portfolio Tracker & Signal Configurator */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <PortfolioTracker
-          currentPrice={currentPrice}
-          activeSymbol={symbol}
-          isStock={false}
-        />
-        <SignalConfigurator
-          activeSymbol={symbol}
-          currentPrice={currentPrice}
-        />
+        <PortfolioTracker currentPrice={currentPrice} activeSymbol={symbol} isStock={false} />
+        <SignalConfigurator activeSymbol={symbol} currentPrice={currentPrice} />
       </div>
     </div>
   );

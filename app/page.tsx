@@ -35,12 +35,12 @@ import { motion, AnimatePresence } from "framer-motion";
 
 function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) {
   const [klines, setKlines] = useState<KlineBasic[]>([]);
-  const [symbol, setSymbol] = useState(marketType === "crypto" ? "BTCUSDT" : "BBCA");
+  const [symbol, setSymbol] = useState(marketType === "crypto" ? "BTCUSDT" : "IHSG");
   const [loading, setLoading] = useState(false);
 
   // Sync symbol default when marketType changes
   useEffect(() => {
-    setSymbol(marketType === "crypto" ? "BTCUSDT" : "BBCA");
+    setSymbol(marketType === "crypto" ? "BTCUSDT" : "IHSG");
   }, [marketType]);
 
   // Fetch klines for the active symbol
