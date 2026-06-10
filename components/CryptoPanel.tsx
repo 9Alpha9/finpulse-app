@@ -97,14 +97,6 @@ const MONTHS_ID = [
   "Jul", "Agt", "Sep", "Okt", "Nov", "Des",
 ];
 
-/**
- * Format Unix timestamp (detik, UTC) ke string tanggal/jam
- * tanpa offset timezone browser — sesuai standar Binance/TradingView.
- *
- * NOTE: Untuk timeframe 1D ke atas, Binance membuka candle di 00:00 UTC.
- * Ini adalah perilaku BENAR dan sama seperti TradingView untuk crypto.
- * Tidak perlu dikoreksi.
- */
 const formatTimestampUTC = (ts: number): string => {
   const d = new Date(ts * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -139,11 +131,6 @@ const getIntervalStartTimestamp = (intervalStr: string): number => {
   }
   return Math.floor(now / 1000);
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Binance API — gunakan fetchAllCryptoKlines dari @/src/lib/binance
-// (menggunakan api.binance.info agar tidak diblokir ISP Indonesia)
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CoinIcon
@@ -225,11 +212,9 @@ const TimeframeDropdown = ({
           >
             {TIMEFRAME_GROUPS.map((group) => (
               <div key={group.group} className="mb-2 last:mb-0">
-                {/* Group header */}
                 <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                   {group.group}
                 </div>
-                {/* Grid of buttons */}
                 <div className="grid grid-cols-4 gap-1">
                   {group.items.map((item) => {
                     const isActive = item.value === value;
@@ -241,8 +226,8 @@ const TimeframeDropdown = ({
                           setOpen(false);
                         }}
                         className={`rounded-md py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
-                            ? "bg-brand-green text-white shadow-sm shadow-brand-green/30"
-                            : "text-foreground hover:bg-secondary"
+                          ? "bg-brand-green text-white shadow-sm shadow-brand-green/30"
+                          : "text-foreground hover:bg-secondary"
                           }`}
                       >
                         {item.label}
@@ -278,7 +263,7 @@ export default function CryptoPanel() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [isLoadingChart, setIsLoadingChart] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false); // background history load
+  const [loadingMore, setLoadingMore] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const priceRef = useRef(currentPrice);
@@ -288,17 +273,29 @@ export default function CryptoPanel() {
   const candlestickSeriesRef = useRef<any>(null);
   const lastBarRef = useRef<KlineData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // Cache: Map<"BTCUSDT_1d" → KlineData[]> agar ganti timeframe tidak perlu fetch ulang
   const klineCache = useRef<Map<string, KlineData[]>>(new Map());
 
-  // ── Format helpers ──────────────────────────────────────────────────────────
+  // PERBAIKAN ANIMASI TRADINGVIEW: 
+  // Menyimpan arah tick transaksi *terakhir*.
+  const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
+  const prevPriceRef = useRef<number>(currentPrice);
+
+  useEffect(() => {
+    if (currentPrice > prevPriceRef.current && prevPriceRef.current !== 0) {
+      setTickDirection("up");
+    } else if (currentPrice < prevPriceRef.current && prevPriceRef.current !== 0) {
+      setTickDirection("down");
+    }
+    // Jika harga sama, pertahankan warna terakhir.
+    if (currentPrice > 0) {
+      prevPriceRef.current = currentPrice;
+    }
+  }, [currentPrice]);
 
   const formatPrice = (price: number) =>
     price < 0.01
       ? price.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 })
       : price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  // ── Close coin dropdown on outside click ────────────────────────────────────
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -308,8 +305,6 @@ export default function CryptoPanel() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-
-  // ── Fetch available pairs on mount ───────────────────────────────────────────
 
   useEffect(() => {
     fetchActiveCryptoPairs()
@@ -321,8 +316,6 @@ export default function CryptoPanel() {
         ])
       );
   }, []);
-
-  // ── Update last candle with latest price tick ────────────────────────────────
 
   const updateCandle = useCallback((price: number) => {
     if (!candlestickSeriesRef.current || !lastBarRef.current) return;
@@ -345,29 +338,18 @@ export default function CryptoPanel() {
     try {
       candlestickSeriesRef.current.update(updatedBar);
       lastBarRef.current = updatedBar;
-    } catch {
-      /* sinkronisasi tertunda */
-    }
+    } catch { }
   }, [interval]);
-
-  // ── 1. Load klines — fast 2-phase: instant preview → background full history ──
 
   useEffect(() => {
     let active = true;
     const cacheKey = `${symbol}_${interval}`;
 
-    /**
-     * Terapkan data ke chart series DAN update React state (untuk count display).
-     * Dipanggil langsung di dalam loadData agar guard `active` benar-benar efektif.
-     * Tidak melalui useEffect([chartData]) agar tidak ada race condition.
-     */
     function applyToChart(data: KlineData[]) {
       if (!active) return;
       if (candlestickSeriesRef.current && chartRef.current) {
         candlestickSeriesRef.current.setData(data);
-        // Reset auto-scale agar Y-axis menyesuaikan ke range harga koin baru
         chartRef.current.priceScale("right").applyOptions({ autoScale: true });
-        // fitContent() dulu (fit semua data), lalu scrollToRealTime (ke candle terbaru)
         chartRef.current.timeScale().fitContent();
         chartRef.current.timeScale().scrollToRealTime();
       }
@@ -378,31 +360,25 @@ export default function CryptoPanel() {
     async function loadData() {
       setErrorBanner(null);
       setLoadingMore(false);
-
-      // Reset harga agar tidak tampilkan harga koin/timeframe sebelumnya
-      // (penting untuk user non-premium yang tidak punya WebSocket effect)
       setCurrentPrice(0);
       setPriceChange(0);
+      setTickDirection("neutral"); // Reset warna saat ganti koin
 
-      // ── Bersihkan chart dulu agar tidak ada sisa data interval/symbol sebelumnya ──
       if (candlestickSeriesRef.current) {
         candlestickSeriesRef.current.setData([]);
         chartRef.current?.priceScale("right").applyOptions({ autoScale: true });
       }
 
-      // ── FASE 0: Cache hit → tampil instan tanpa loading spinner ──
       const cached = klineCache.current.get(cacheKey);
       if (cached && cached.length > 0) {
         applyToChart(cached);
         setIsLoadingChart(false);
-        // Refresh harga terkini di background (tidak blocking)
         fetchCryptoPrice(symbol)
           .then((p) => { if (active) setCurrentPrice(p); })
-          .catch(() => {});
+          .catch(() => { });
         return;
       }
 
-      // ── FASE 1: 1 batch saja (1000 candle terbaru) → chart muncul ~500ms ──
       setIsLoadingChart(true);
       try {
         const [price, firstBatch] = await Promise.all([
@@ -412,10 +388,9 @@ export default function CryptoPanel() {
 
         if (!active) return;
         setCurrentPrice(price);
-        applyToChart(firstBatch);          // langsung ke series, tidak lewat state
+        applyToChart(firstBatch);
         setIsLoadingChart(false);
 
-        // ── FASE 2: Background — paginate history lama tanpa blokir UI ──
         if (firstBatch.length < 1000) {
           klineCache.current.set(cacheKey, firstBatch);
           return;
@@ -432,7 +407,6 @@ export default function CryptoPanel() {
           const older = await fetchCryptoKlines(symbol, interval, LIMIT, endTime);
           if (!older || older.length === 0) break;
 
-          // Deduplikasi + sort sebelum terapkan
           const combined = [...older, ...all];
           const seen = new Set<number>();
           const merged = combined.filter((k) => {
@@ -443,7 +417,7 @@ export default function CryptoPanel() {
           merged.sort((a, b) => a.time - b.time);
           all = merged;
 
-          applyToChart(all);               // guard `active` ada di dalam applyToChart
+          applyToChart(all);
 
           if (older.length < LIMIT) break;
           endTime = older[0].time * 1000 - 1;
@@ -457,7 +431,6 @@ export default function CryptoPanel() {
 
       } catch (err) {
         if (!active) return;
-        console.error("[CryptoPanel] Error loading Binance data:", err);
         setIsLoadingChart(false);
         setLoadingMore(false);
         setErrorBanner("Gagal mengambil data Binance. Menggunakan mode simulasi...");
@@ -477,9 +450,9 @@ export default function CryptoPanel() {
           const c = base * (1 + (Math.random() - 0.5) * 0.04);
           return {
             time: fakeTime - (299 - i) * 86400,
-            open:  o,
-            high:  Math.max(o, c) * (1 + Math.random() * 0.02),
-            low:   Math.min(o, c) * (1 - Math.random() * 0.02),
+            open: o,
+            high: Math.max(o, c) * (1 + Math.random() * 0.02),
+            low: Math.min(o, c) * (1 - Math.random() * 0.02),
             close: c,
           };
         });
@@ -497,7 +470,6 @@ export default function CryptoPanel() {
     const container = chartContainerRef.current;
     if (!container) return;
 
-    // FIX: deteksi tema yang benar
     const isDark = theme === "dark";
     const { backgroundColor, textColor, gridColor, borderColor } = getThemeColors(isDark);
 
@@ -516,11 +488,8 @@ export default function CryptoPanel() {
         borderColor,
         timeVisible: true,
         secondsVisible: interval === "1s",
-        // Tidak menggunakan tickMarkFormatter — library sudah handle dengan benar.
-        // Candle 1D di 00:00 UTC adalah BENAR sesuai standar Binance & TradingView.
       },
       localization: {
-        // FIX: gunakan UTC methods untuk hindari offset WIB
         timeFormatter: (ts: number) => formatTimestampUTC(ts),
       },
     };
@@ -531,11 +500,11 @@ export default function CryptoPanel() {
 
       const chart = createChart(container, { width, height: 320, ...chartOptions });
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: "#10b981",
-        downColor: "#ef4444",
+        upColor: "#089981", // TradingView Green
+        downColor: "#f23645", // TradingView Red
         borderVisible: false,
-        wickUpColor: "#10b981",
-        wickDownColor: "#ef4444",
+        wickUpColor: "#089981",
+        wickDownColor: "#f23645",
       });
 
       chartRef.current = chart;
@@ -548,16 +517,9 @@ export default function CryptoPanel() {
       (chartRef.current as any).__handleResize = handleResize;
 
     } else {
-      // Chart sudah ada → hanya update opsi (warna tema, secondsVisible, dll)
       chartRef.current.applyOptions(chartOptions);
     }
   }, [theme, symbol, interval]);
-
-  // ── 3. [DIHAPUS] setData kini dipanggil langsung di loadData (lihat applyToChart)
-  //      Tidak ada lagi useEffect([chartData]) yang bisa mengaplikasikan data
-  //      usang dari interval/symbol sebelumnya.
-
-  // ── Cleanup saat unmount ─────────────────────────────────────────────────────
 
   useEffect(() => {
     return () => {
@@ -571,14 +533,10 @@ export default function CryptoPanel() {
     };
   }, []);
 
-  // ── 4. Real-time price update (WebSocket premium, REST fallback) ─────────────
+  // ── 4. Real-time price update (WebSocket) ─────────────
 
   useEffect(() => {
     if (!isPremium) return;
-
-    // Reset harga saat symbol berganti agar tidak tampil harga koin sebelumnya
-    setCurrentPrice(0);
-    setPriceChange(0);
 
     let ws: WebSocket | null = null;
     let fallback: NodeJS.Timeout | null = null;
@@ -596,7 +554,6 @@ export default function CryptoPanel() {
             updateCandle(p);
           }
         } catch {
-          // Jangan pakai priceRef saat harga belum diinisialisasi
           if (active && priceRef.current > 0) {
             const drift = (Math.random() - 0.5) * priceRef.current * 0.0005;
             const dec = symbol.includes("PEPE") || symbol.includes("SHIB") ? 8 : 2;
@@ -622,7 +579,6 @@ export default function CryptoPanel() {
       );
       ws.onclose = () => { if (active) startFallback(); };
 
-      // Jika WebSocket tidak respond dalam 4 detik, pakai REST polling
       const timer = setTimeout(() => { if (!gotWs && active) startFallback(); }, 4000);
       return () => {
         active = false;
@@ -639,15 +595,9 @@ export default function CryptoPanel() {
     }
   }, [isPremium, symbol, updateCandle]);
 
-  // ── Filtered pairs ───────────────────────────────────────────────────────────
-
   const filteredPairs = availablePairs.filter((p) =>
     p.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -679,19 +629,30 @@ export default function CryptoPanel() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6 text-right">
+        <div className="flex items-baseline gap-6 text-right">
+
+          {/* BLOK HARGA LIVE DENGAN WARNA TRADINGVIEW */}
           <div>
-            <div className="text-sm font-semibold text-muted-foreground">Harga Live</div>
-            <h3 className="text-2xl font-extrabold tracking-tight text-foreground">
+            <div className="text-sm font-semibold text-muted-foreground mb-1">Harga Live</div>
+            {/* Animasi warna mulus tanpa mengubah background, murni text color */}
+            <motion.h3
+              animate={{
+                color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : (theme === "dark" ? "#f8fafc" : "#0f172a"),
+              }}
+              transition={{ duration: 0.1 }} // Transisi sangat cepat agar responsif seperti market
+              className="text-2xl font-extrabold tracking-tight px-1 py-0.5"
+            >
               {currentPrice === 0
                 ? <span className="text-muted-foreground animate-pulse">···</span>
                 : `$${formatPrice(currentPrice)}`}
-            </h3>
+            </motion.h3>
           </div>
+
+          {/* BLOK PERUBAHAN 24J */}
           <div>
-            <div className="text-sm font-semibold text-muted-foreground">Perubahan 24j</div>
+            <div className="text-sm font-semibold text-muted-foreground mb-1">Perubahan 24j</div>
             <div
-              className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-emerald-500" : "text-destructive"
+              className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-[#089981]" : "text-[#f23645]"
                 }`}
             >
               {priceChange >= 0
@@ -700,6 +661,7 @@ export default function CryptoPanel() {
               <span>{priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%</span>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -721,8 +683,7 @@ export default function CryptoPanel() {
                   <span>{getSymbolBase(symbol)}/USDT</span>
                 </div>
                 <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition duration-200 ${isSelectOpen ? "rotate-180" : ""
-                    }`}
+                  className={`h-4 w-4 text-muted-foreground transition duration-200 ${isSelectOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
@@ -759,8 +720,8 @@ export default function CryptoPanel() {
                                 setSearchQuery("");
                               }}
                               className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
-                                  ? "bg-brand-green/10 text-brand-green font-bold"
-                                  : "text-foreground hover:bg-secondary"
+                                ? "bg-brand-green/10 text-brand-green font-bold"
+                                : "text-foreground hover:bg-secondary"
                                 }`}
                             >
                               <div className="flex items-center gap-2">
