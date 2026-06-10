@@ -234,7 +234,7 @@ export default function SignalsPanel() {
         <div className="space-y-1">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Peringatan Risiko & Disclaimer Legal</h4>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Semua pemberitahuan sinyal, alert Take Profit (TP), dan rekomendasi DCA yang dihasilkan oleh **FinPulse** didasarkan pada kalkulasi algoritma statistik komputer yang bersifat probabilitas. Sinyal ini **BUKAN** merupakan jaminan keuntungan absolut, melainkan probabilitas matematika semata. ArthaVerse tidak bertanggung jawab atas kerugian modal yang dialami pengguna. Pengguna wajib melakukan analisis fundamental dan teknikal mandiri (*Do Your Own Research - DYOR*) sebelum melakukan aksi beli atau jual aset di pasar keuangan.
+            Semua pemberitahuan sinyal, alert Take Profit (TP), dan rekomendasi DCA yang dihasilkan oleh **FinPulse** didasarkan pada kalkulasi algoritma statistik komputer yang bersifat probabilitas. Sinyal ini **BUKAN** merupakan jaminan keuntungan absolut, melainkan probabilitas matematika semata. FinPulse tidak bertanggung jawab atas kerugian modal yang dialami pengguna. Pengguna wajib melakukan analisis fundamental dan teknikal mandiri (*Do Your Own Research - DYOR*) sebelum melakukan aksi beli atau jual aset di pasar keuangan.
           </p>
         </div>
       </div>
