@@ -1,9 +1,374 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Bell, Briefcase, TrendingUp, AlertCircle, DollarSign } from "lucide-react";
-import { fetchCryptoPrice } from "@/src/lib/binance";
-import { fetchStockPriceFromYahoo } from "@/src/lib/stocks";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import {
+  Plus, Trash2, Bell, Briefcase, Lock, Crown,
+  ChevronDown, ChevronUp, Search, Check, Loader2,
+} from "lucide-react";
+import { fetchCryptoPrice, fetchActiveCryptoPairs } from "@/src/lib/binance";
+import { fetchStockPriceFromYahoo, stockTickers } from "@/src/lib/stocks";
+import { GOLD_INSTRUMENTS } from "@/components/GoldPanel";
+import { useThemeAuth } from "@/app/context/ThemeAuthContext";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared types
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface AssetOption {
+  symbol: string;
+  label: string;
+  type: "crypto" | "stock" | "gold";
+  sub?: string;
+}
+
+type PickerTab = "crypto" | "idx" | "gold";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Static option lists (crypto loaded dynamically)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FALLBACK_CRYPTO: AssetOption[] = [
+  { symbol: "BTCUSDT", label: "Bitcoin", type: "crypto", sub: "BTC" },
+  { symbol: "ETHUSDT", label: "Ethereum", type: "crypto", sub: "ETH" },
+  { symbol: "BNBUSDT", label: "BNB", type: "crypto", sub: "BNB" },
+  { symbol: "SOLUSDT", label: "Solana", type: "crypto", sub: "SOL" },
+  { symbol: "XRPUSDT", label: "XRP", type: "crypto", sub: "XRP" },
+  { symbol: "ADAUSDT", label: "Cardano", type: "crypto", sub: "ADA" },
+  { symbol: "DOGEUSDT", label: "Dogecoin", type: "crypto", sub: "DOGE" },
+  { symbol: "PEPEUSDT", label: "Pepe", type: "crypto", sub: "PEPE" },
+  { symbol: "AVAXUSDT", label: "Avalanche", type: "crypto", sub: "AVAX" },
+  { symbol: "LINKUSDT", label: "Chainlink", type: "crypto", sub: "LINK" },
+];
+
+const IDX_OPTIONS: AssetOption[] = Object.entries(stockTickers).map(([sym, info]) => ({
+  symbol: sym,
+  label: info.name,
+  type: "stock" as const,
+  sub: info.sector,
+}));
+
+const GOLD_OPTIONS: AssetOption[] = GOLD_INSTRUMENTS.map((g) => ({
+  symbol: g.symbol,
+  label: g.label,
+  type: "gold" as const,
+  sub: g.currency === "IDR" ? "IDR" : "USD",
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab config — accent colors (dark-mode friendly)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TAB_CFG = {
+  crypto: {
+    icon: "🪙",
+    label: "Crypto",
+    // tab active styles
+    tabActive: "text-orange-400 border-orange-400",
+    // trigger badge
+    badge: "bg-orange-500/20 text-orange-300",
+    // list selected row
+    rowActive: "bg-orange-500/15 ring-1 ring-orange-500/40",
+    rowText: "text-orange-300",
+    // accent dot selected
+    dot: "bg-orange-400",
+    // sub-badge
+    subBg: "bg-orange-500/10",
+    subText: "text-orange-400",
+    // check
+    check: "text-orange-400",
+  },
+  idx: {
+    icon: "📈",
+    label: "Saham IDX",
+    tabActive: "text-blue-400 border-blue-400",
+    badge: "bg-blue-500/20 text-blue-300",
+    rowActive: "bg-blue-500/15 ring-1 ring-blue-500/40",
+    rowText: "text-blue-300",
+    dot: "bg-blue-400",
+    subBg: "bg-blue-500/10",
+    subText: "text-blue-400",
+    check: "text-blue-400",
+  },
+  gold: {
+    icon: "🥇",
+    label: "Emas",
+    tabActive: "text-yellow-400 border-yellow-400",
+    badge: "bg-yellow-500/20 text-yellow-300",
+    rowActive: "bg-yellow-500/15 ring-1 ring-yellow-500/40",
+    rowText: "text-yellow-300",
+    dot: "bg-yellow-400",
+    subBg: "bg-yellow-500/10",
+    subText: "text-yellow-400",
+    check: "text-yellow-400",
+  },
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SymbolPicker — portal-based modal (centered desktop / bottom-sheet mobile)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SymbolPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (symbol: string, type: "crypto" | "stock" | "gold") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<PickerTab>("crypto");
+  const [query, setQuery] = useState("");
+  const [cryptoList, setCryptoList] = useState<AssetOption[]>(FALLBACK_CRYPTO);
+  const [loadingCrypto, setLoadingCrypto] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // SSR guard for portal
+  useEffect(() => setMounted(true), []);
+
+  // Lock body scroll when modal open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  // ESC key closes modal
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  // Load full Binance pairs when crypto tab is first opened
+  useEffect(() => {
+    if (tab !== "crypto" || cryptoList.length > FALLBACK_CRYPTO.length) return;
+    setLoadingCrypto(true);
+    fetchActiveCryptoPairs()
+      .then((pairs) => {
+        if (pairs.length === 0) return;
+        setCryptoList(pairs.map((sym) => ({
+          symbol: sym,
+          label: sym.replace("USDT", "") + " / USDT",
+          type: "crypto" as const,
+          sub: sym.replace("USDT", ""),
+        })));
+      })
+      .catch(() => { })
+      .finally(() => setLoadingCrypto(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const close = () => { setOpen(false); setQuery(""); };
+
+  // Current tab list + search filter
+  const rawList: AssetOption[] =
+    tab === "crypto" ? cryptoList :
+      tab === "idx" ? IDX_OPTIONS :
+        GOLD_OPTIONS;
+
+  const filtered = query.trim() === ""
+    ? rawList
+    : rawList.filter(
+      (o) =>
+        o.symbol.toLowerCase().includes(query.toLowerCase()) ||
+        o.label.toLowerCase().includes(query.toLowerCase())
+    );
+
+  // Resolve selected item from all sources
+  const allOptions = [...cryptoList, ...IDX_OPTIONS, ...GOLD_OPTIONS];
+  const selected = allOptions.find((o) => o.symbol === value);
+  const selTab: PickerTab =
+    selected?.type === "crypto" ? "crypto" :
+      selected?.type === "gold" ? "gold" : "idx";
+
+  const cfg = TAB_CFG[tab];
+
+  const handleTabChange = (t: PickerTab) => { setTab(t); setQuery(""); };
+
+  // ── Modal content (shared between desktop + mobile)
+  const modalContent = (
+    <>
+      {/* Tab strip */}
+      <div className="flex border-b border-border/60 shrink-0">
+        {(["crypto", "idx", "gold"] as PickerTab[]).map((t) => {
+          const c = TAB_CFG[t];
+          const act = tab === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => handleTabChange(t)}
+              className={`flex-1 flex flex-col items-center gap-1 py-3 text-[11px] sm:text-xs font-extrabold uppercase tracking-wider transition-all duration-150 cursor-pointer border-b-2 ${act
+                  ? `${c.tabActive} bg-card`
+                  : "text-muted-foreground/40 border-transparent hover:text-muted-foreground/80"
+                }`}
+            >
+              <span className="text-lg leading-none">{c.icon}</span>
+              <span>{c.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="px-4 py-3 border-b border-border/40 shrink-0">
+        <div className="relative flex items-center">
+          <Search className="absolute left-3.5 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
+          <input
+            autoFocus
+            type="text"
+            placeholder={`Cari ${cfg.label.toLowerCase()}...`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-xl border border-border/60 bg-muted/20 py-2.5 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-brand-green/50 focus:ring-1 focus:ring-brand-green/20 focus:bg-background transition"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-3.5 text-xs text-muted-foreground/50 hover:text-foreground transition cursor-pointer"
+            >✕</button>
+          )}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/10 shrink-0">
+        <span className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
+          {filtered.length} aset
+        </span>
+        {tab === "crypto" && loadingCrypto && (
+          <span className="flex items-center gap-1.5 text-[10px] font-bold text-brand-green animate-pulse">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Memuat dari Binance...
+          </span>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="overflow-y-auto flex-1 p-3 space-y-0.5">
+        {filtered.length > 0 ? (
+          filtered.map((opt) => {
+            const isSelected = opt.symbol === value;
+            return (
+              <button
+                key={opt.symbol}
+                type="button"
+                onClick={() => { onChange(opt.symbol, opt.type); close(); }}
+                className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-100 cursor-pointer group ${isSelected
+                    ? `${cfg.rowActive} ${cfg.rowText}`
+                    : "hover:bg-muted/50 dark:hover:bg-white/[0.05]"
+                  }`}
+              >
+                <div className={`shrink-0 h-2 w-2 rounded-full transition-colors ${isSelected ? cfg.dot : "bg-border/60 group-hover:bg-muted-foreground/30"
+                  }`} />
+
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-bold truncate ${isSelected ? "text-inherit" : "text-foreground"
+                    }`}>{opt.symbol}</div>
+                  {opt.label && opt.label !== opt.symbol && (
+                    <div className="text-[11px] text-muted-foreground/50 truncate mt-0.5">{opt.label}</div>
+                  )}
+                </div>
+
+                {opt.sub && (
+                  <span className={`shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide ${isSelected ? "opacity-75" : `${cfg.subBg} ${cfg.subText}`
+                    }`}>{opt.sub}</span>
+                )}
+
+                {isSelected && <Check className={`shrink-0 h-4 w-4 ${cfg.check}`} />}
+              </button>
+            );
+          })
+        ) : (
+          <div className="py-16 text-center space-y-2">
+            <div className="text-4xl opacity-20">🔍</div>
+            <div className="text-sm text-muted-foreground/40 font-medium">Aset tidak ditemukan</div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* ── Trigger button ─────────────────────────────────────────────────── */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-2.5 rounded-xl border border-border bg-card py-2.5 px-3.5 cursor-pointer hover:border-brand-green/50 hover:bg-muted/20 transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-brand-green/30"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {selected ? (
+            <>
+              <span className={`shrink-0 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide ${TAB_CFG[selTab].badge}`}>
+                {TAB_CFG[selTab].label.replace("Saham ", "")}
+              </span>
+              <span className="text-sm font-bold text-foreground truncate">{selected.symbol}</span>
+              <span className="text-[11px] text-muted-foreground/60 truncate hidden sm:inline">{selected.label}</span>
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground/50 select-none">Pilih aset...</span>
+          )}
+        </div>
+        <ChevronDown className="shrink-0 h-4 w-4 text-muted-foreground/50" />
+      </button>
+
+      {/* ── Portal modal ───────────────────────────────────────────────────── */}
+      {mounted && open && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+        >
+          {/* Modal card — bottom sheet on mobile, centered on desktop */}
+          <div
+            className="
+              w-full sm:w-[640px] sm:max-w-[92vw]
+              bg-card border border-border/60
+              flex flex-col
+              shadow-2xl shadow-black/50
+              sm:rounded-2xl rounded-t-3xl
+              overflow-hidden
+              animate-in
+              slide-in-from-bottom-4 sm:fade-in-0 sm:zoom-in-95
+              duration-200
+            "
+            style={{ maxHeight: "88dvh" }}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/60 shrink-0">
+              <div>
+                <h3 className="text-base font-extrabold text-foreground">Pilih Aset</h3>
+                <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                  Crypto · Saham IDX · Instrumen Emas
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition cursor-pointer text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal body (tabs + search + list) */}
+            {modalContent}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PortfolioItem & SignalSettings types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface PortfolioItem {
   id: string;
@@ -19,301 +384,283 @@ export interface SignalSettings {
   dca: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PortfolioTracker
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface PortfolioTrackerProps {
   currentPrice: number;
   activeSymbol: string;
   isStock: boolean;
 }
 
-export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: PortfolioTrackerProps) {
+export function PortfolioTracker({ currentPrice, activeSymbol }: PortfolioTrackerProps) {
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [assetType, setAssetType] = useState<"crypto" | "stock">("crypto");
   const [symbol, setSymbol] = useState("");
   const [amount, setAmount] = useState("");
   const [avgBuyPrice, setAvgBuyPrice] = useState("");
-
-  // Background live prices for all portfolio items
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   // Load portfolio from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("finpulse_signals");
+    const saved = localStorage.getItem("finpulse_portfolio");
     if (saved) {
-      try {
-        setItems(JSON.parse(saved));
-      } catch (e) {
-        console.error("Error loading portfolio from local storage:", e);
-      }
+      try { setItems(JSON.parse(saved)); } catch { /* ignore */ }
     }
   }, []);
 
-  // Sync active symbol price directly
+  // Sync active symbol price
   useEffect(() => {
     if (activeSymbol) {
-      setLivePrices((prev) => ({
-        ...prev,
-        [activeSymbol]: currentPrice,
-      }));
+      setLivePrices((prev) => ({ ...prev, [activeSymbol]: currentPrice }));
     }
   }, [activeSymbol, currentPrice]);
 
-  // Fetch prices for other portfolio assets in the background
+  // Fetch background prices for other portfolio assets
   useEffect(() => {
     async function fetchBackgroundPrices() {
       const prices: Record<string, number> = { ...livePrices };
       let updated = false;
-
       for (const item of items) {
         if (item.symbol === activeSymbol) continue;
-        if (prices[item.symbol] !== undefined) continue; // skip if already loaded
-
+        if (prices[item.symbol] !== undefined) continue;
         try {
           if (item.type === "crypto") {
-            const p = await fetchCryptoPrice(item.symbol);
-            prices[item.symbol] = p;
-            updated = true;
+            prices[item.symbol] = await fetchCryptoPrice(item.symbol);
           } else {
-            const p = await fetchStockPriceFromYahoo(item.symbol);
-            prices[item.symbol] = p;
-            updated = true;
+            prices[item.symbol] = await fetchStockPriceFromYahoo(item.symbol);
           }
-        } catch (e) {
-          console.warn(`Could not load background price for ${item.symbol}:`, e);
-        }
+          updated = true;
+        } catch { /* ignore */ }
       }
-
-      if (updated) {
-        setLivePrices(prices);
-      }
+      if (updated) setLivePrices(prices);
     }
-
-    if (items.length > 0) {
-      fetchBackgroundPrices();
-    }
+    if (items.length > 0) fetchBackgroundPrices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, activeSymbol]);
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-
     if (!symbol || !amount || !avgBuyPrice) {
       setFormError("Semua kolom wajib diisi.");
       return;
     }
-
     const amtNum = parseFloat(amount);
     const priceNum = parseFloat(avgBuyPrice);
-
     if (isNaN(amtNum) || amtNum <= 0 || isNaN(priceNum) || priceNum <= 0) {
-      setFormError("Jumlah dan Harga Beli rata-rata harus berupa angka positif.");
+      setFormError("Jumlah dan harga harus berupa angka positif.");
       return;
     }
-
-    const cleanSymbol = symbol.trim().toUpperCase();
-
     const newItem: PortfolioItem = {
       id: Date.now().toString(),
       type: assetType,
-      symbol: cleanSymbol,
+      symbol: symbol.trim().toUpperCase(),
       amount: amtNum,
       avgBuyPrice: priceNum,
     };
-
     const updated = [...items, newItem];
     setItems(updated);
-    localStorage.setItem("finpulse_signals", JSON.stringify(updated));
-
-    // Clear form inputs
-    setSymbol("");
-    setAmount("");
-    setAvgBuyPrice("");
+    localStorage.setItem("finpulse_portfolio", JSON.stringify(updated));
+    setSymbol(""); setAmount(""); setAvgBuyPrice("");
+    setShowForm(false);
   };
 
   const handleDeleteItem = (id: string) => {
     const updated = items.filter((item) => item.id !== id);
     setItems(updated);
-    localStorage.setItem("finpulse_signals", JSON.stringify(updated));
+    localStorage.setItem("finpulse_portfolio", JSON.stringify(updated));
   };
 
-  const formatCurrency = (val: number, type: "crypto" | "stock") => {
-    if (type === "crypto") {
-      return `$${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else {
-      return `Rp ${val.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
-    }
-  };
+  const fmt = (val: number, type: "crypto" | "stock") =>
+    type === "crypto"
+      ? `$${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `Rp ${val.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
-      <div className="flex items-center gap-2">
-        <Briefcase className="h-5 w-5 text-brand-green" />
-        <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Portofolio Saya</h4>
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Briefcase className="h-4 w-4 text-brand-green" />
+          <h4 className="text-sm font-bold text-foreground">Portofolio Saya</h4>
+        </div>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="flex items-center gap-1.5 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 text-brand-green border border-brand-green/20 px-3 py-1.5 text-xs font-bold transition cursor-pointer"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Tambah Aset</span>
+          <span className="sm:hidden">Tambah</span>
+          {showForm ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
       </div>
 
-      {/* Add Asset Form */}
-      <form onSubmit={handleAddItem} className="space-y-3 p-4 rounded-xl border border-border bg-background">
-        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-          Tambah Aset Manual
-        </div>
+      {/* Collapsible add form */}
+      {showForm && (
+        <form onSubmit={handleAddItem} className="px-5 py-4 bg-muted/20 border-b border-border space-y-3">
+          {formError && (
+            <div className="text-[11px] text-destructive font-semibold bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+              ⚠️ {formError}
+            </div>
+          )}
 
-        {formError && (
-          <div className="text-[10px] text-red-500 font-semibold mb-2">
-            ⚠️ {formError}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[9px] font-bold uppercase text-muted-foreground mb-1">Tipe Aset</label>
-            <select
-              value={assetType}
-              onChange={(e) => setAssetType(e.target.value as "crypto" | "stock")}
-              className="w-full rounded-lg border border-border bg-card py-1.5 px-2.5 text-xs text-foreground focus:outline-none focus:border-brand-green cursor-pointer"
-            >
-              <option value="crypto">Crypto</option>
-              <option value="stock">Stock (Saham)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[9px] font-bold uppercase text-muted-foreground mb-1">Simbol/Ticker</label>
-            <input
-              type="text"
-              placeholder={assetType === "crypto" ? "BTCUSDT" : "BBCA"}
+          {/* Asset picker */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+              Pilih Aset
+            </label>
+            <SymbolPicker
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              className="w-full rounded-lg border border-border bg-card py-1.5 px-2.5 text-xs text-foreground focus:outline-none focus:border-brand-green uppercase"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[9px] font-bold uppercase text-muted-foreground mb-1">Jumlah Dimiliki</label>
-            <input
-              type="number"
-              step="any"
-              placeholder="0.1"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-border bg-card py-1.5 px-2.5 text-xs text-foreground focus:outline-none focus:border-brand-green [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              onChange={(sym, type) => {
+                setSymbol(sym);
+                setAssetType(type === "gold" ? "stock" : type);
+              }}
             />
           </div>
 
-          <div>
-            <label className="block text-[9px] font-bold uppercase text-muted-foreground mb-1">Harga Beli Rata-Rata</label>
-            <input
-              type="number"
-              step="any"
-              placeholder={assetType === "crypto" ? "64000" : "10100"}
-              value={avgBuyPrice}
-              onChange={(e) => setAvgBuyPrice(e.target.value)}
-              className="w-full rounded-lg border border-border bg-card py-1.5 px-2.5 text-xs text-foreground focus:outline-none focus:border-brand-green [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
+          {/* Amount + Price */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                Jumlah Dimiliki
+              </label>
+              <input
+                type="number" inputMode="decimal" step="any"
+                placeholder="0.1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full rounded-xl border border-border bg-card py-2.5 px-3 text-sm text-foreground focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                Harga Beli Rata-Rata
+              </label>
+              <input
+                type="number" inputMode="decimal" step="any"
+                placeholder={assetType === "crypto" ? "64000" : "10100"}
+                value={avgBuyPrice}
+                onChange={(e) => setAvgBuyPrice(e.target.value)}
+                className="w-full rounded-xl border border-border bg-card py-2.5 px-3 text-sm text-foreground focus:outline-none focus:border-brand-green focus:ring-1 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
           </div>
-        </div>
 
-        <button
-          type="submit"
-          className="w-full mt-2 rounded-lg bg-brand-green py-2 text-xs font-bold text-white shadow-xs hover:opacity-90 transition cursor-pointer flex items-center justify-center gap-1"
-        >
-          <Plus className="h-4 w-4" />
-          <span>TAMBAH KE PORTOFOLIO</span>
-        </button>
-      </form>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="submit"
+              className="flex-1 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white hover:opacity-90 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm shadow-brand-green/20"
+            >
+              <Plus className="h-4 w-4" />
+              Tambah ke Portofolio
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setFormError(null); }}
+              className="rounded-xl border border-border bg-card py-2.5 px-4 text-sm font-semibold text-muted-foreground hover:bg-muted transition cursor-pointer"
+            >
+              Batal
+            </button>
+          </div>
+        </form>
+      )}
 
-      {/* Assets List Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
-          <thead>
-            <tr className="border-b border-border text-muted-foreground font-semibold">
-              <th className="pb-2">Simbol</th>
-              <th className="pb-2">Jumlah</th>
-              <th className="pb-2">Harga Beli</th>
-              <th className="pb-2">Harga Live</th>
-              <th className="pb-2 text-right">PnL</th>
-              <th className="pb-2 text-right"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {items.length > 0 ? (
-              items.map((item) => {
-                const livePrice = livePrices[item.symbol] !== undefined ? livePrices[item.symbol] : null;
+      {/* Assets list */}
+      <div className="p-4 space-y-2">
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+            <Briefcase className="h-7 w-7 opacity-20" />
+            <p className="text-xs font-medium">Belum ada aset di portofolio</p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="text-xs text-brand-green font-bold hover:underline cursor-pointer mt-1"
+            >
+              + Tambah aset pertama kamu
+            </button>
+          </div>
+        ) : (
+          items.map((item) => {
+            const livePrice = livePrices[item.symbol] ?? null;
+            const pnlAbs = livePrice !== null ? (livePrice - item.avgBuyPrice) * item.amount : 0;
+            const pnlPct = livePrice !== null ? ((livePrice - item.avgBuyPrice) / item.avgBuyPrice) * 100 : 0;
+            const isProfit = pnlAbs >= 0;
+            const pnlColor = livePrice === null ? "text-muted-foreground/40" : isProfit ? "text-emerald-400" : "text-red-400";
 
-                let pnlAbs = 0;
-                let pnlPercent = 0;
+            return (
+              <div
+                key={item.id}
+                className="rounded-xl border border-border bg-background/60 p-3 flex items-center gap-3 hover:border-border/80 hover:bg-muted/10 transition-all duration-100 group"
+              >
+                {/* Type badge */}
+                <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-extrabold select-none ${item.type === "crypto"
+                    ? "bg-orange-500/15 text-orange-400 dark:bg-orange-500/20"
+                    : "bg-blue-500/15 text-blue-400 dark:bg-blue-500/20"
+                  }`}>
+                  {item.type === "crypto" ? "CR" : "IDX"}
+                </div>
 
-                if (livePrice !== null) {
-                  pnlAbs = (livePrice - item.avgBuyPrice) * item.amount;
-                  pnlPercent = ((livePrice - item.avgBuyPrice) / item.avgBuyPrice) * 100;
-                }
+                {/* Symbol + info */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-foreground/90 truncate">{item.symbol}</div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground/50">{item.amount} unit</span>
+                    <span className="text-muted-foreground/30">·</span>
+                    <span className="text-[10px] text-muted-foreground/50">@ {fmt(item.avgBuyPrice, item.type)}</span>
+                  </div>
+                </div>
 
-                const isProfit = pnlAbs >= 0;
-
-                return (
-                  <tr key={item.id} className="hover:bg-muted/10 transition">
-                    <td className="py-2.5 font-bold text-foreground">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase select-none ${item.type === "crypto" ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500"
-                          }`}>
-                          {item.type === "crypto" ? "C" : "S"}
-                        </span>
-                        <span>{item.symbol}</span>
+                {/* Live + PnL */}
+                <div className="text-right shrink-0">
+                  {livePrice !== null ? (
+                    <>
+                      <div className="text-xs font-semibold text-foreground/90 tabular-nums">{fmt(livePrice, item.type)}</div>
+                      <div className={`text-[10px] font-bold tabular-nums mt-0.5 ${pnlColor}`}>
+                        {isProfit ? "+" : ""}{pnlPct.toFixed(2)}%
                       </div>
-                    </td>
-                    <td className="py-2.5 text-muted-foreground font-medium">{item.amount}</td>
-                    <td className="py-2.5 text-muted-foreground font-medium">{formatCurrency(item.avgBuyPrice, item.type)}</td>
-                    <td className="py-2.5 text-foreground font-semibold">
-                      {livePrice !== null ? formatCurrency(livePrice, item.type) : <span className="text-[10px] text-muted-foreground italic">Memuat...</span>}
-                    </td>
-                    <td className={`py-2.5 text-right font-extrabold ${livePrice === null ? "text-muted-foreground" : isProfit ? "text-emerald-500" : "text-destructive"}`}>
-                      {livePrice !== null ? (
-                        <div className="flex flex-col text-right">
-                          <span>{isProfit ? "+" : ""}{pnlPercent.toFixed(2)}%</span>
-                          <span className="text-[9px] font-medium opacity-80">{formatCurrency(pnlAbs, item.type)}</span>
-                        </div>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        className="p-1 text-muted-foreground hover:text-destructive rounded-md transition cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-muted-foreground italic text-[11px]">
-                  Belum ada aset di portofolio Anda.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                    </>
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground/30 italic">Memuat...</div>
+                  )}
+                </div>
+
+                {/* Delete */}
+                <button
+                  onClick={() => handleDeleteItem(item.id)}
+                  className="shrink-0 p-1.5 rounded-lg text-muted-foreground/20 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SignalConfigurator
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface SignalConfiguratorProps {
   activeSymbol: string;
   currentPrice: number;
 }
 
-export function SignalConfigurator({ activeSymbol, currentPrice }: SignalConfiguratorProps) {
+export function SignalConfigurator({ activeSymbol }: SignalConfiguratorProps) {
+  const { subscriptionTier, setSubscriptionTier } = useThemeAuth();
+  const isPremium = subscriptionTier === "premium";
+
   const [tpPrice, setTpPrice] = useState("");
   const [slPrice, setSlPrice] = useState("");
   const [dcaPrice, setDcaPrice] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Load signal config for the active symbol on change
   useEffect(() => {
     setSaveSuccess(false);
     const savedSignals = localStorage.getItem("finpulse_signals");
@@ -327,135 +674,103 @@ export function SignalConfigurator({ activeSymbol, currentPrice }: SignalConfigu
           setDcaPrice(config.dca || "");
           return;
         }
-      } catch (e) {
-        console.error("Error parsing signal settings:", e);
-      }
+      } catch { /* ignore */ }
     }
-    // Default values if no config saved
-    setTpPrice("");
-    setSlPrice("");
-    setDcaPrice("");
+    setTpPrice(""); setSlPrice(""); setDcaPrice("");
   }, [activeSymbol]);
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPremium) return;
     setSaveSuccess(false);
-
     const savedSignals = localStorage.getItem("finpulse_signals") || "{}";
     let parsed: Record<string, SignalSettings> = {};
-
-    try {
-      parsed = JSON.parse(savedSignals);
-    } catch (e) {
-      parsed = {};
-    }
-
-    parsed[activeSymbol] = {
-      tp: tpPrice.trim(),
-      sl: slPrice.trim(),
-      dca: dcaPrice.trim(),
-    };
-
+    try { parsed = JSON.parse(savedSignals); } catch { parsed = {}; }
+    parsed[activeSymbol] = { tp: tpPrice.trim(), sl: slPrice.trim(), dca: dcaPrice.trim() };
     localStorage.setItem("finpulse_signals", JSON.stringify(parsed));
     setSaveSuccess(true);
-
-    // Auto fade alert toast
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const getCleanBase = () => {
-    return activeSymbol.replace("USDT", "");
-  };
-
+  const getCleanBase = () => activeSymbol.replace("USDT", "");
   const isStock = activeSymbol.endsWith(".JK") || !activeSymbol.includes("USDT");
   const currencySymbol = isStock ? "Rp" : "$";
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between space-y-6">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bell className="h-5 w-5 text-brand-green" />
-            <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Sinyal WhatsApp</h4>
-          </div>
-          <span className="text-[9px] font-bold bg-brand-green/15 text-brand-green px-2 py-0.5 rounded-full select-none uppercase">
-            {getCleanBase()} Alerts
-          </span>
+    <div className="rounded-2xl border border-border bg-card shadow-sm flex flex-col justify-between overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4 w-4 text-brand-green" />
+          <h4 className="text-sm font-bold text-foreground">Sinyal WhatsApp</h4>
         </div>
+        <span className="text-[9px] font-bold bg-brand-green/15 text-brand-green px-2 py-0.5 rounded-full select-none uppercase">
+          {getCleanBase()} Alerts
+        </span>
+      </div>
 
-        <p className="text-[11px] text-muted-foreground leading-normal">
-          Konfigurasikan notifikasi alert sinyal trading ke nomor WhatsApp terdaftar untuk aset <strong>{getCleanBase()}</strong>.
+      {/* Body */}
+      <div className="p-5 space-y-4 relative">
+        {/* Free tier lock overlay */}
+        {!isPremium && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-card/80 backdrop-blur-sm rounded-b-2xl p-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/20">
+              <Lock className="h-6 w-6 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Fitur Premium</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed max-w-[200px] mx-auto">
+                Kirim sinyal TP/SL/DCA ke WhatsApp kamu secara otomatis
+              </p>
+            </div>
+            <button
+              onClick={() => setSubscriptionTier("premium")}
+              className="flex items-center gap-1.5 rounded-full bg-amber-500 text-white text-xs font-bold px-5 py-2 shadow-md shadow-amber-500/25 hover:opacity-90 transition cursor-pointer"
+            >
+              <Crown className="h-3.5 w-3.5 fill-current" />
+              Upgrade ke Premium
+            </button>
+          </div>
+        )}
+
+        <p className="text-[11px] text-muted-foreground/70 leading-normal">
+          Konfigurasikan notifikasi sinyal trading ke WhatsApp untuk aset <strong className="text-foreground/80">{getCleanBase()}</strong>.
         </p>
 
         {saveSuccess && (
-          <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-500 rounded-xl p-3 text-xs leading-relaxed font-semibold">
-            ✓ Konfigurasi sinyal alert berhasil disimpan!
+          <div className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl p-3 text-xs font-semibold">
+            ✓ Konfigurasi sinyal berhasil disimpan!
           </div>
         )}
 
         <form onSubmit={handleSaveConfig} className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1.5">
-              Target Take Profit (TP) Price
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="any"
-                placeholder="Target TP..."
-                value={tpPrice}
-                onChange={(e) => setTpPrice(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs focus:outline-none focus:border-brand-green [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span className="absolute right-3 top-2 text-[10px] font-bold text-muted-foreground uppercase select-none">
-                {currencySymbol}
-              </span>
+          {[
+            { label: "Target Take Profit (TP)", val: tpPrice, set: setTpPrice, ph: "Target TP..." },
+            { label: "Stop Loss (SL)", val: slPrice, set: setSlPrice, ph: "Batas Stop Loss..." },
+            { label: "DCA Target Harga", val: dcaPrice, set: setDcaPrice, ph: "Target Harga Beli DCA..." },
+          ].map(({ label, val, set, ph }) => (
+            <div key={label}>
+              <label className="block text-[10px] font-bold uppercase text-muted-foreground/60 mb-1.5">{label}</label>
+              <div className="relative">
+                <input
+                  type="number" inputMode="decimal" step="any"
+                  placeholder={ph}
+                  value={val}
+                  onChange={(e) => set(e.target.value)}
+                  disabled={!isPremium}
+                  className="w-full rounded-xl border border-border bg-background/80 py-2.5 px-3 pr-8 text-sm text-foreground focus:outline-none focus:border-brand-green/60 focus:ring-1 focus:ring-brand-green/20 disabled:opacity-40 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="absolute right-3 top-2.5 text-[10px] font-bold text-muted-foreground/50 uppercase select-none">{currencySymbol}</span>
+              </div>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1.5">
-              Stop Loss (SL) Price
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="any"
-                placeholder="Batas Stop Loss..."
-                value={slPrice}
-                onChange={(e) => setSlPrice(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs focus:outline-none focus:border-brand-green [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span className="absolute right-3 top-2 text-[10px] font-bold text-muted-foreground uppercase select-none">
-                {currencySymbol}
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1.5">
-              DCA (Target Harga Cicil) Price
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="any"
-                placeholder="Target Harga Beli DCA..."
-                value={dcaPrice}
-                onChange={(e) => setDcaPrice(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background py-2 px-3 text-xs focus:outline-none focus:border-brand-green [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span className="absolute right-3 top-2 text-[10px] font-bold text-muted-foreground uppercase select-none">
-                {currencySymbol}
-              </span>
-            </div>
-          </div>
+          ))}
 
           <button
             type="submit"
-            className="w-full mt-2 rounded-lg bg-brand-green py-2.5 text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer select-none"
+            disabled={!isPremium}
+            className="w-full mt-1 rounded-xl bg-brand-green py-2.5 text-sm font-bold text-white shadow-sm shadow-brand-green/20 hover:opacity-95 transition cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            SIMPAN KONFIGURASI ALERTS
+            Simpan Konfigurasi Alerts
           </button>
         </form>
       </div>

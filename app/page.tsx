@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import Sidebar, { DashboardTab } from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 
 // Dashboard panels
-import NetWorthCard from "@/components/NetWorthCard";
 // import CashFlowCard from "@/components/CashFlowCard";
 // import BudgetBreakdownCard from "@/components/BudgetBreakdownCard";
 import ReferralCard from "@/components/ReferralCard";
@@ -24,7 +23,6 @@ import GoldPanel from "@/components/GoldPanel";
 
 import {
   ChevronRight,
-  Edit2,
   Loader2,
   TrendingUp,
   Activity

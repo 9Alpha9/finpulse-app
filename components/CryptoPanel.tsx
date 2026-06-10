@@ -750,7 +750,7 @@ export default function CryptoPanel() {
             {/* Live / Delayed badge */}
             {isPremium ? (
               <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full select-none">
-                <Zap className="h-3 w-3 fill-current animate-pulse" /> LIVE STREAMING
+                <Zap className="h-3 w-3 fill-current animate-pulse" /> LIVE
               </span>
             ) : (
               <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded-full select-none">

@@ -1,31 +1,31 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface KlineBasic {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
+  time:  number;
+  open:  number;
+  high:  number;
+  low:   number;
   close: number;
 }
 
 type Signal = "Strong Buy" | "Buy" | "Neutral" | "Sell" | "Strong Sell";
 
 interface IndicatorResult {
-  name: string;
-  value: string;
+  name:   string;
+  value:  string;
   signal: Signal;
-  score: number;
+  score:  number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Math Helpers (Logika dasar matematika bawaanmu yang sudah akurat)
+// Math Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function closes(klines: KlineBasic[]) { return klines.map((k) => k.close); }
@@ -72,18 +72,17 @@ function calcRSI(closes: number[], period = 14): number {
     avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period;
   }
   if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
+  return 100 - 100 / (1 + avgGain / avgLoss);
 }
 
 function calcMACD(closes: number[]): { macd: number; signal: number; hist: number } {
   if (closes.length < 35) return { macd: 0, signal: 0, hist: 0 };
-  const ema12 = ema(closes, 12);
-  const ema26 = ema(closes, 26);
+  const ema12  = ema(closes, 12);
+  const ema26  = ema(closes, 26);
   const macdLine = ema12.map((v, i) => (isNaN(v) || isNaN(ema26[i]) ? NaN : v - ema26[i]));
-  const validMacd = macdLine.filter((v) => !isNaN(v));
+  const validMacd  = macdLine.filter((v) => !isNaN(v));
   const signalLine = ema(validMacd, 9);
-  const lastMacd = validMacd[validMacd.length - 1] ?? 0;
+  const lastMacd   = validMacd[validMacd.length - 1] ?? 0;
   const lastSignal = signalLine[signalLine.length - 1] ?? 0;
   return { macd: lastMacd, signal: lastSignal, hist: lastMacd - lastSignal };
 }
@@ -92,67 +91,53 @@ function calcStochastic(klines: KlineBasic[], kPeriod = 14, dPeriod = 3): { k: n
   if (klines.length < kPeriod) return { k: 50, d: 50 };
   const kValues: number[] = [];
   for (let i = kPeriod - 1; i < klines.length; i++) {
-    const slice = klines.slice(i - kPeriod + 1, i + 1);
+    const slice   = klines.slice(i - kPeriod + 1, i + 1);
     const highest = Math.max(...slice.map((k) => k.high));
-    const lowest = Math.min(...slice.map((k) => k.low));
-    const kVal = highest === lowest ? 50 : ((klines[i].close - lowest) / (highest - lowest)) * 100;
-    kValues.push(kVal);
+    const lowest  = Math.min(...slice.map((k) => k.low));
+    kValues.push(highest === lowest ? 50 : ((klines[i].close - lowest) / (highest - lowest)) * 100);
   }
   const kSmoothed = sma(kValues, 3);
-  const dLine = sma(kSmoothed.filter((v) => !isNaN(v)), dPeriod);
+  const dLine     = sma(kSmoothed.filter((v) => !isNaN(v)), dPeriod);
   return {
     k: kSmoothed[kSmoothed.length - 1] ?? 50,
     d: dLine[dLine.length - 1] ?? 50,
   };
 }
 
-function calcBollingerBands(closes: number[], period = 20, stdDev = 2): { percentB: number; squeeze: boolean } {
-  if (closes.length < period) return { percentB: 0.5, squeeze: false };
-  const slice = closes.slice(-period);
-  const middle = slice.reduce((a, b) => a + b, 0) / period;
+function calcBollingerBands(closes: number[], period = 20, stdDev = 2): { percentB: number } {
+  if (closes.length < period) return { percentB: 0.5 };
+  const slice    = closes.slice(-period);
+  const middle   = slice.reduce((a, b) => a + b, 0) / period;
   const variance = slice.reduce((a, b) => a + Math.pow(b - middle, 2), 0) / period;
-  const std = Math.sqrt(variance);
-  const upper = middle + stdDev * std;
-  const lower = middle - stdDev * std;
-  const last = closes[closes.length - 1];
+  const std      = Math.sqrt(variance);
+  const upper    = middle + stdDev * std;
+  const lower    = middle - stdDev * std;
+  const last     = closes[closes.length - 1];
   const percentB = upper === lower ? 0.5 : (last - lower) / (upper - lower);
-  const bandWidth = (upper - lower) / middle;
-  return { percentB, squeeze: bandWidth < 0.03 };
+  return { percentB };
 }
 
 function calcVolumeTrend(klines: KlineBasic[]): number {
   if (klines.length < 10) return 0;
-  const recent = klines.slice(-5).map((k) => k.high - k.low);
-  const prev = klines.slice(-10, -5).map((k) => k.high - k.low);
+  const recent    = klines.slice(-5).map((k) => k.high - k.low);
+  const prev      = klines.slice(-10, -5).map((k) => k.high - k.low);
   const avgRecent = recent.reduce((a, b) => a + b, 0) / 5;
-  const avgPrev = prev.reduce((a, b) => a + b, 0) / 5;
-  if (avgPrev === 0) return 0;
-  return (avgRecent - avgPrev) / avgPrev;
+  const avgPrev   = prev.reduce((a, b) => a + b, 0) / 5;
+  return avgPrev === 0 ? 0 : (avgRecent - avgPrev) / avgPrev;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TRADINGVIEW VOTING ENGINE (Bypass status Neutral yang macet)
-// ─────────────────────────────────────────────────────────────────────────────
 
 function getSignalFromVoting(buys: number, neutrals: number, sells: number): Signal {
   const total = buys + sells;
   if (total === 0) return "Neutral";
-
-  if (buys > sells) {
-    if (buys >= total * 0.7) return "Strong Buy";
-    return "Buy";
-  } else if (sells > buys) {
-    if (sells >= total * 0.7) return "Strong Sell";
-    return "Sell";
-  }
+  if (buys > sells)  return buys  >= total * 0.7 ? "Strong Buy"  : "Buy";
+  if (sells > buys)  return sells >= total * 0.7 ? "Strong Sell" : "Sell";
   return "Neutral";
 }
 
 function calculateTechnicalsGrouped(klines: KlineBasic[]) {
-  const c = closes(klines);
+  const c         = closes(klines);
   const lastClose = c[c.length - 1];
 
-  // 1. KELOMPOK OSCILLATORS
   const oscillators: IndicatorResult[] = [];
 
   const rsi = calcRSI(c, 14);
@@ -181,250 +166,297 @@ function calculateTechnicalsGrouped(klines: KlineBasic[]) {
   else if (volTrend > 0.1 && lastClose < (c[c.length - 2] ?? lastClose)) volSig = "Sell";
   oscillators.push({ name: "Volume Trend", value: `${(volTrend * 100).toFixed(1)}%`, signal: volSig, score: volSig === "Buy" ? 1 : volSig === "Sell" ? -1 : 0 });
 
-  // 2. KELOMPOK MOVING AVERAGES (Diperbanyak agar hasil presisi seperti TradingView asli)
   const movingAverages: IndicatorResult[] = [];
   const maPeriods = [10, 20, 30, 50, 100, 200];
-
-  maPeriods.forEach(p => {
+  maPeriods.forEach((p) => {
     if (c.length >= p) {
-      const vEma = ema(c, p);
+      const vEma   = ema(c, p);
       const lastEma = vEma[vEma.length - 1];
-      const emaSig = lastClose > lastEma ? "Buy" : "Sell";
+      const emaSig  = lastClose > lastEma ? "Buy" : "Sell";
       movingAverages.push({ name: `EMA (${p})`, value: lastEma.toFixed(2), signal: emaSig, score: emaSig === "Buy" ? 1 : -1 });
 
-      const vSma = sma(c, p);
+      const vSma    = sma(c, p);
       const lastSma = vSma[vSma.length - 1];
-      const smaSig = lastClose > lastSma ? "Buy" : "Sell";
+      const smaSig  = lastClose > lastSma ? "Buy" : "Sell";
       movingAverages.push({ name: `SMA (${p})`, value: lastSma.toFixed(2), signal: smaSig, score: smaSig === "Buy" ? 1 : -1 });
     }
   });
 
-  // TOTAL AGGREGATION VOTING
   const allIndicators = [...oscillators, ...movingAverages];
-  const buys = allIndicators.filter(i => i.signal === "Buy").length;
-  const sells = allIndicators.filter(i => i.signal === "Sell").length;
-  const neutrals = allIndicators.filter(i => i.signal === "Neutral").length;
-
-  // Hitung persentase posisi jarum gauge (-100 ke 100)
+  const buys     = allIndicators.filter((i) => i.signal === "Buy" || i.signal === "Strong Buy").length;
+  const sells    = allIndicators.filter((i) => i.signal === "Sell" || i.signal === "Strong Sell").length;
+  const neutrals = allIndicators.filter((i) => i.signal === "Neutral").length;
   const totalScore = allIndicators.reduce((acc, i) => acc + i.score, 0);
-  const aggregate = (totalScore / allIndicators.length) * 100;
+  const aggregate  = (totalScore / allIndicators.length) * 100;
 
-  return {
-    oscillators,
-    movingAverages,
-    buys,
-    neutrals,
-    sells,
-    aggregate,
-    signal: getSignalFromVoting(buys, neutrals, sells)
-  };
+  return { oscillators, movingAverages, buys, neutrals, sells, aggregate, signal: getSignalFromVoting(buys, neutrals, sells) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UI: TradingView Gauge Semicircle Arc
+// Gauge SVG — clean semicircle meter
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TradingViewGauge({ value, signal }: { value: number; signal: Signal }) {
-  const safeValue = Math.max(-100, Math.min(100, value));
-  const angle = (safeValue / 100) * 90;
-  const rad = ((angle - 90) * Math.PI) / 180;
+const SIGNAL_CONFIG = {
+  "Strong Sell": { color: "#F23645", hex: "#F23645" },
+  "Sell":        { color: "#F7525F", hex: "#F7525F" },
+  "Neutral":     { color: "#787B86", hex: "#787B86" },
+  "Buy":         { color: "#22AB94", hex: "#22AB94" },
+  "Strong Buy":  { color: "#089981", hex: "#089981" },
+} as const;
 
-  const cx = 110, cy = 90, radius = 70;
-  const nx = cx + 50 * Math.cos(rad);
-  const ny = cy + 50 * Math.sin(rad);
+function GaugeMeter({ value, signal }: { value: number; signal: Signal }) {
+  // value: -100 (strong sell) to +100 (strong buy)
+  // Map to angle: -100 → 180°, 0 → 270°, +100 → 360° (right side)
+  // Semicircle from 180° to 360° (left to right, top arc)
 
-  const colors = {
-    "Strong Sell": "#F23645",
-    "Sell": "#F7525F",
-    "Neutral": "#787B86",
-    "Buy": "#22AB94",
-    "Strong Buy": "#089981",
-  };
+  const clampedValue = Math.max(-100, Math.min(100, value));
+  // Map -100..100 to 0..180 (degrees within the semicircle)
+  const fraction  = (clampedValue + 100) / 200; // 0 to 1
+  const angleDeg  = 180 + fraction * 180;        // 180° to 360°
+  const angleRad  = (angleDeg * Math.PI) / 180;
 
-  const activeColor = colors[signal];
-  const trackGray = "rgba(120, 123, 134, 0.15)";
+  const cx = 120, cy = 110, R = 80;
+  const needleLen = 65;
 
-  function drawSimpleArc(startDeg: number, endDeg: number) {
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const x1 = cx + radius * Math.cos(toRad(startDeg)), y1 = cy + radius * Math.sin(toRad(startDeg));
-    const x2 = cx + radius * Math.cos(toRad(endDeg)), y2 = cy + radius * Math.sin(toRad(endDeg));
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2}`;
+  const nx = cx + needleLen * Math.cos(angleRad);
+  const ny = cy + needleLen * Math.sin(angleRad);
+
+  const { color } = SIGNAL_CONFIG[signal];
+
+  // Zone arc segments (each 36°): Strong Sell, Sell, Neutral, Buy, Strong Buy
+  const zones = [
+    { from: 180, to: 216, color: "#F23645" },
+    { from: 216, to: 252, color: "#F7525F" },
+    { from: 252, to: 288, color: "#787B86" },
+    { from: 288, to: 324, color: "#22AB94" },
+    { from: 324, to: 360, color: "#089981" },
+  ];
+
+  function arcPath(fromDeg: number, toDeg: number, r: number) {
+    const f  = (fromDeg * Math.PI) / 180;
+    const t  = (toDeg   * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(f);
+    const y1 = cy + r * Math.sin(f);
+    const x2 = cx + r * Math.cos(t);
+    const y2 = cy + r * Math.sin(t);
+    const large = toDeg - fromDeg > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
   }
 
-  const arcMapping = {
-    "Strong Sell": { start: 180, end: 216 },
-    "Sell": { start: 216, end: 252 },
-    "Neutral": { start: 252, end: 288 },
-    "Buy": { start: 288, end: 324 },
-    "Strong Buy": { start: 324, end: 360 },
-  };
-
-  const activeArc = arcMapping[signal];
-
   return (
-    <div className="relative w-full max-w-[280px] mx-auto select-none">
-      <span className="absolute top-30 -left-4 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong sell</span>
-      <span className="absolute top-2 left-10 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Sell</span>
-      <span className="absolute -top-1 left-[43%] text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Neutral</span>
-      <span className="absolute top-2 right-10 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Buy</span>
-      <span className="absolute top-30 right-2 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong buy</span>
-
-      <svg viewBox="0 0 220 110" className="w-full mt-4">
-        <path d={drawSimpleArc(180, 360)} stroke={trackGray} strokeWidth={7} fill="none" strokeLinecap="round" />
+    <svg viewBox="0 0 240 130" className="w-full max-w-[300px] mx-auto" style={{ overflow: "visible" }}>
+      {/* Zone arcs — background (dim) */}
+      {zones.map((z) => (
         <path
-          d={drawSimpleArc(activeArc.start, activeArc.end)}
-          stroke={activeColor} strokeWidth={8} fill="none" strokeLinecap="round"
-          className="transition-all duration-500 ease-in-out"
+          key={z.from}
+          d={arcPath(z.from, z.to, R)}
+          stroke={z.color}
+          strokeWidth={10}
+          fill="none"
+          strokeLinecap="butt"
+          opacity={0.18}
         />
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" className="transition-all duration-500 ease-out" />
-        <circle cx={cx} cy={cy} r="4" fill="#94a3b8" />
-        <circle cx={cx} cy={cy} r="1.5" fill="#111827" />
-      </svg>
-    </div>
+      ))}
+
+      {/* Active zone arc — bright */}
+      {zones.map((z) => {
+        const midDeg    = (z.from + z.to) / 2;
+        const zoneMid   = ((midDeg - 180) / 180) * 2 - 1; // -1 to 1
+        const zoneVal   = clampedValue / 100;              // -1 to 1
+        const isActive  = (
+          (signal === "Strong Sell" && z.color === "#F23645") ||
+          (signal === "Sell"        && z.color === "#F7525F") ||
+          (signal === "Neutral"     && z.color === "#787B86") ||
+          (signal === "Buy"         && z.color === "#22AB94") ||
+          (signal === "Strong Buy"  && z.color === "#089981")
+        );
+        return isActive ? (
+          <path
+            key={`active-${z.from}`}
+            d={arcPath(z.from, z.to, R)}
+            stroke={z.color}
+            strokeWidth={11}
+            fill="none"
+            strokeLinecap="round"
+            className="transition-all duration-500"
+          />
+        ) : null;
+      })}
+
+      {/* Tick marks at zone boundaries */}
+      {[180, 216, 252, 288, 324, 360].map((deg) => {
+        const r   = (deg * Math.PI) / 180;
+        const x1  = cx + (R - 8) * Math.cos(r);
+        const y1  = cy + (R - 8) * Math.sin(r);
+        const x2  = cx + (R + 8) * Math.cos(r);
+        const y2  = cy + (R + 8) * Math.sin(r);
+        return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth={1.5} className="text-border" />;
+      })}
+
+      {/* Needle */}
+      <line
+        x1={cx} y1={cy}
+        x2={nx} y2={ny}
+        stroke={color}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        className="transition-all duration-700 ease-out"
+        style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
+      />
+
+      {/* Pivot dot */}
+      <circle cx={cx} cy={cy} r={6}  fill={color}     className="transition-colors duration-500" style={{ filter: `drop-shadow(0 0 3px ${color}60)` }} />
+      <circle cx={cx} cy={cy} r={2.5} fill="var(--color-card)" />
+
+      {/* Zone labels */}
+      <text x={12}  y={112} textAnchor="middle" fontSize="8" fontWeight="700" fill="#F23645" opacity={0.9} fontFamily="inherit">SELL</text>
+      <text x={240} y={112} textAnchor="middle" fontSize="8" fontWeight="700" fill="#089981" opacity={0.9} fontFamily="inherit">BUY</text>
+      <text x={120} y={20}  textAnchor="middle" fontSize="8" fontWeight="700" fill="#787B86" opacity={0.9} fontFamily="inherit">NEUTRAL</text>
+    </svg>
   );
 }
 
-function RowActionBadge({ signal }: { signal: Signal }) {
-  const styles: Record<Signal, string> = {
-    "Strong Buy": "text-[#089981] bg-[#089981]/10 px-2 py-0.5 rounded font-extrabold text-[10px]",
-    "Buy": "text-[#22AB94] bg-[#22AB94]/10 px-2 py-0.5 rounded font-extrabold text-[10px]",
-    "Neutral": "text-[#787B86] bg-[#787B86]/10 px-2 py-0.5 rounded font-extrabold text-[10px]",
-    "Sell": "text-[#F7525F] bg-[#F7525F]/10 px-2 py-0.5 rounded font-extrabold text-[10px]",
-    "Strong Sell": "text-[#F23645] bg-[#F23645]/10 px-2 py-0.5 rounded font-extrabold text-[10px]",
-  };
-  return <span className={styles[signal]}>{signal.toUpperCase()}</span>;
+function SignalBadge({ signal }: { signal: Signal }) {
+  const { color } = SIGNAL_CONFIG[signal];
+  return (
+    <span
+      className="inline-flex items-center text-[10px] font-extrabold px-2 py-0.5 rounded"
+      style={{ color, backgroundColor: `${color}18` }}
+    >
+      {signal.toUpperCase()}
+    </span>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main Technicals Component
+// Main TechnicalsGauge
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TechnicalsGaugeProps {
-  klines:   KlineBasic[];
-  symbol:   string;
+  klines:    KlineBasic[];
+  symbol:    string;
   interval?: string;
-  market?:  "crypto" | "stocks";
+  market?:   "crypto" | "stocks";
 }
 
 export default function TechnicalsGauge({ klines, symbol, interval = "1D" }: TechnicalsGaugeProps) {
   const result = useMemo(() => {
-    if (!klines || klines.length < 35) return null; // Butuh data MA200
+    if (!klines || klines.length < 35) return null;
     return calculateTechnicalsGrouped(klines);
   }, [klines]);
 
   if (!result) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 border border-border rounded-2xl bg-card text-muted-foreground text-xs space-y-2">
+      <div className="flex flex-col items-center justify-center h-48 border border-border rounded-2xl bg-card text-muted-foreground text-xs gap-2">
         <Loader2 className="h-5 w-5 animate-spin text-brand-green" />
-        <span>Mengumpulkan data osilator & MA untuk {symbol}...</span>
+        <span>Mengumpulkan data indikator untuk {symbol}...</span>
       </div>
     );
   }
 
   const { oscillators, movingAverages, buys, neutrals, sells, aggregate, signal } = result;
-
-  const signalTextColor = {
-    "Strong Buy": "text-[#089981]",
-    "Buy": "text-[#22AB94]",
-    "Neutral": "text-[#787B86]",
-    "Sell": "text-[#F7525F]",
-    "Strong Sell": "text-[#F23645]",
-  }[signal];
+  const { color } = SIGNAL_CONFIG[signal];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* SECTION 1: HEADER & GAUGE SUMMARY CARD */}
-      <div className="border border-border bg-card p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center">
-        <div className="flex items-center gap-2 mb-4 bg-secondary/40 px-3 py-1 rounded-full border border-border/30">
-          <span className="text-xs font-black text-foreground uppercase tracking-wider">{symbol.replace("USDT", "")}</span>
-          <span className="w-1 h-1 rounded-full bg-muted-foreground/50"></span>
-          <span className="text-[10px] font-extrabold text-muted-foreground uppercase">METER TEKNIKAL {interval}</span>
+      {/* ── Gauge Summary Card ─────────────────────────────────────────────── */}
+      <div className="border border-border bg-card rounded-2xl shadow-sm p-6">
+        {/* Header pill */}
+        <div className="flex items-center justify-center mb-5">
+          <div className="flex items-center gap-2 bg-secondary/50 border border-border/40 px-4 py-1.5 rounded-full">
+            <span className="text-xs font-black text-foreground uppercase tracking-wider">
+              {symbol.replace("USDT", "")}
+            </span>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Meter Teknikal {interval}
+            </span>
+          </div>
         </div>
 
-        <TradingViewGauge value={aggregate} signal={signal} />
+        {/* Gauge SVG */}
+        <GaugeMeter value={aggregate} signal={signal} />
 
-        <div className="text-center mt-2">
-          <p className={`text-3xl font-black uppercase tracking-tight ${signalTextColor} drop-shadow-xs animate-pulse`}>
+        {/* Signal label */}
+        <div className="text-center mt-3">
+          <p
+            className="text-2xl font-black uppercase tracking-tight transition-colors duration-500"
+            style={{ color, textShadow: `0 0 20px ${color}30` }}
+          >
             {signal}
           </p>
         </div>
 
-        {/* Counter Summary Terpadu */}
-        <div className="flex items-center justify-between w-full max-w-[280px] pt-5 mt-2 border-t border-border/40 text-center">
-          <div>
-            <div className="text-xl font-black text-[#F23645]">{sells}</div>
-            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Jual (Sell)</div>
+        {/* Counter row */}
+        <div className="grid grid-cols-3 gap-0 mt-5 pt-4 border-t border-border/40">
+          <div className="text-center border-r border-border/40">
+            <div className="text-xl font-black text-[#F23645] tabular-nums">{sells}</div>
+            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider mt-0.5">Jual (Sell)</div>
           </div>
-          <div className="px-6 border-x border-border/60">
-            <div className="text-xl font-black text-[#787B86]">{neutrals}</div>
-            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Netral</div>
+          <div className="text-center border-r border-border/40">
+            <div className="text-xl font-black text-[#787B86] tabular-nums">{neutrals}</div>
+            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider mt-0.5">Netral</div>
           </div>
-          <div>
-            <div className="text-xl font-black text-[#089981]">{buys}</div>
-            <div className="text-[9px] uppercase font-bold text-brand-green tracking-wider">Beli (Buy)</div>
+          <div className="text-center">
+            <div className="text-xl font-black text-[#089981] tabular-nums">{buys}</div>
+            <div className="text-[9px] uppercase font-bold text-[#089981] tracking-wider mt-0.5">Beli (Buy)</div>
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: SEPARATED BREAKDOWN TABLES (Sektor Berbeda Sesuai TradingView) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 lg:grid-cols-1 gap-6">
+      {/* ── Indicator Tables ───────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* KELOMPOK A: OSCILLATORS TABLE */}
-        <div className="border border-border bg-card p-5 rounded-2xl shadow-sm flex flex-col">
-          <div className="border-b border-border pb-2.5 mb-3 flex items-center justify-between">
-            <h4 className="text-xs font-black text-foreground uppercase tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Sektor Osilator (Oscillators)
-            </h4>
-            <span className="text-[10px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">Momentum</span>
+        {/* Oscillators */}
+        <div className="border border-border bg-card rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-muted/20">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              <h4 className="text-xs font-black text-foreground uppercase tracking-wider">Osilator</h4>
+            </div>
+            <span className="text-[9px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">Momentum</span>
           </div>
 
-          <div className="flex-1 space-y-0 text-sm">
-            <div className="grid grid-cols-3 gap-2 pb-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-              <div>Nama Indikator</div>
-              <div className="text-right">Nilai Angka</div>
-              <div className="text-right">Aksi Pasar</div>
+          <div className="divide-y divide-border/40">
+            {/* Header */}
+            <div className="grid grid-cols-3 gap-2 px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 bg-muted/10">
+              <div>Indikator</div>
+              <div className="text-right">Nilai</div>
+              <div className="text-right">Aksi</div>
             </div>
-
-            {oscillators.map((ind, idx) => (
-              <div
-                key={ind.name}
-                className={`grid grid-cols-3 gap-2 py-3 items-center hover:bg-secondary/20 rounded-lg transition-colors px-1 ${idx !== oscillators.length - 1 ? 'border-b border-border/30' : ''
-                  }`}
-              >
-                <div className="text-foreground font-bold text-xs truncate">{ind.name}</div>
-                <div className="text-right text-foreground font-mono text-xs font-medium">{ind.value}</div>
-                <div className="text-right"><RowActionBadge signal={ind.signal} /></div>
+            {oscillators.map((ind) => (
+              <div key={ind.name} className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center hover:bg-muted/20 transition-colors">
+                <div className="text-xs font-semibold text-foreground truncate">{ind.name}</div>
+                <div className="text-right text-xs font-mono text-muted-foreground">{ind.value}</div>
+                <div className="text-right"><SignalBadge signal={ind.signal} /></div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* KELOMPOK B: MOVING AVERAGES TABLE */}
-        <div className="border border-border bg-card p-5 rounded-2xl shadow-sm flex flex-col">
-          <div className="border-b border-border pb-2.5 mb-3 flex items-center justify-between">
-            <h4 className="text-xs font-black text-foreground uppercase tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Rata-Rata Bergerak (MA)
-            </h4>
-            <span className="text-[10px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">Trend Ride</span>
+        {/* Moving Averages */}
+        <div className="border border-border bg-card rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-muted/20">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <h4 className="text-xs font-black text-foreground uppercase tracking-wider">Moving Average</h4>
+            </div>
+            <span className="text-[9px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">Trend Ride</span>
           </div>
 
-          <div className="flex-1 space-y-0 text-sm max-h-[340px] overflow-y-auto pr-1 scrollbar-thin">
-            <div className="grid grid-cols-3 gap-2 pb-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider sticky top-0 bg-card z-10">
-              <div>Sinyal Tren</div>
-              <div className="text-right">Nilai Eksekusi</div>
-              <div className="text-right">Aksi Pasar</div>
+          <div className="divide-y divide-border/40 max-h-[320px] overflow-y-auto scrollbar-thin">
+            {/* Header */}
+            <div className="grid grid-cols-3 gap-2 px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 bg-muted/10 sticky top-0 z-10">
+              <div>Sinyal</div>
+              <div className="text-right">Nilai</div>
+              <div className="text-right">Aksi</div>
             </div>
-
-            {movingAverages.map((ind, idx) => (
-              <div
-                key={ind.name}
-                className={`grid grid-cols-3 gap-2 py-2.5 items-center hover:bg-secondary/20 rounded-lg transition-colors px-1 ${idx !== movingAverages.length - 1 ? 'border-b border-border/30' : ''
-                  }`}
-              >
-                <div className="text-foreground font-bold text-xs truncate">{ind.name}</div>
-                <div className="text-right text-foreground font-mono text-xs font-medium">{ind.value}</div>
-                <div className="text-right"><RowActionBadge signal={ind.signal} /></div>
+            {movingAverages.map((ind) => (
+              <div key={ind.name} className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center hover:bg-muted/20 transition-colors">
+                <div className="text-xs font-semibold text-foreground truncate">{ind.name}</div>
+                <div className="text-right text-xs font-mono text-muted-foreground">{ind.value}</div>
+                <div className="text-right"><SignalBadge signal={ind.signal} /></div>
               </div>
             ))}
           </div>
