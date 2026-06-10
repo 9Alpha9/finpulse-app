@@ -25,6 +25,8 @@ import {
 import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
+import TechnicalsGauge from "@/components/TechnicalsGauge"; // Sesuaikan dengan lokasi foldermu
+import { div } from "framer-motion/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -821,7 +823,7 @@ export default function CryptoPanel() {
       </div>
 
       {/* Portfolio Tracker & Signal Configurator */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <PortfolioTracker
           currentPrice={currentPrice}
           activeSymbol={symbol}
@@ -832,7 +834,6 @@ export default function CryptoPanel() {
           currentPrice={currentPrice}
         />
       </div>
-
     </div>
   );
 }
