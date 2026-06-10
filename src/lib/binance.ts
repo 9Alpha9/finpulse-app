@@ -1,7 +1,16 @@
 /**
- * Binance API Helper via Binance Vision (Anti-Blokir Kominfo & Vercel)
- * * Domain diganti ke .vision untuk mengelabui pemblokiran DNS ISP lokal
- * tanpa memerlukan setup proxy server-side yang rumit.
+ * Binance API Helper
+ *
+ * Semua HTTP fetch dialihkan ke route proxy internal Next.js (/api/crypto/*)
+ * yang berjalan di server-side menggunakan data-api.binance.vision.
+ *
+ * Ini menyelesaikan dua masalah sekaligus:
+ *  1. CORS — browser tidak boleh langsung call API external
+ *  2. Blokir ISP — api.binance.com/info diblokir di Indonesia;
+ *     data-api.binance.vision bisa diakses dari server
+ *
+ * WebSocket tetap terhubung langsung dari browser menggunakan
+ * data-stream.binance.vision yang umumnya tidak diblokir.
  */
 
 export interface KlineData {
@@ -13,15 +22,14 @@ export interface KlineData {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Internal helper — Build URL ke Binance Vision (Bypass DNS Blokir)
+// Helper — bangun URL ke proxy internal
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildUrl(path: string, params: Record<string, string | number> = {}): string {
+function proxyUrl(path: string, params: Record<string, string | number> = {}): string {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
-  const queryString = qs.toString();
-  // Menggunakan data-api.binance.vision yang lolos dari sensor internet positif
-  return `https://data-api.binance.vision${path}${queryString ? '?' + queryString : ''}`;
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return `${path}${query}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,7 +38,7 @@ function buildUrl(path: string, params: Record<string, string | number> = {}): s
 
 export async function fetchCryptoPrice(symbol: string): Promise<number> {
   const res = await fetch(
-    buildUrl("/api/v3/ticker/price", { symbol: symbol.toUpperCase() }),
+    proxyUrl("/api/crypto/price", { symbol: symbol.toUpperCase() }),
     { cache: "no-store" }
   );
   if (!res.ok) throw new Error(`Gagal ambil harga ${symbol}: HTTP ${res.status}`);
@@ -39,7 +47,7 @@ export async function fetchCryptoPrice(symbol: string): Promise<number> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Historical klines (batasan 1000 per request)
+// 2. Historical klines (single batch, maks 1000)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchCryptoKlines(
@@ -55,23 +63,23 @@ export async function fetchCryptoKlines(
   };
   if (endTime !== undefined) params.endTime = endTime;
 
-  const res = await fetch(buildUrl("/api/v3/klines", params), {
+  const res = await fetch(proxyUrl("/api/crypto/klines", params), {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Gagal ambil klines ${symbol}: HTTP ${res.status}`);
 
-  const data = await res.json();
-  return data.map((item: any[]) => ({
-    time: Math.floor(item[0] / 1000), // openTime → detik
-    open: parseFloat(item[1]),
-    high: parseFloat(item[2]),
-    low: parseFloat(item[3]),
+  const raw: any[][] = await res.json();
+  return raw.map((item) => ({
+    time: Math.floor(item[0] / 1000), // openTime ms → detik
+    open:  parseFloat(item[1]),
+    high:  parseFloat(item[2]),
+    low:   parseFloat(item[3]),
     close: parseFloat(item[4]),
   }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Fetch SEMUA klines historis sejak listing dengan paginasi
+// 3. Fetch SEMUA klines historis dengan paginasi (dipakai di fetchAllCryptoKlines)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchAllCryptoKlines(
@@ -112,12 +120,13 @@ export async function fetchAllCryptoKlines(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. WebSocket real-time stream (Menggunakan Data-Stream Vision)
+// 4. WebSocket real-time stream (browser langsung ke Binance Vision stream)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WS_HOSTS = [
-  "wss://data-stream.binance.vision",
+  "wss://data-stream.binance.vision", // prioritas: tidak diblokir di Indonesia
   "wss://stream.binance.info:9443",
+  "wss://stream.binance.com:443",
 ];
 
 export function connectCryptoWebSocket(
@@ -143,13 +152,13 @@ export function connectCryptoWebSocket(
       }
     };
 
-    ws.onerror = (err) => {
+    ws.onerror = () => {
       if (hostIndex < WS_HOSTS.length - 1) {
         hostIndex++;
         console.warn(`[WS] ${url} gagal, mencoba ${WS_HOSTS[hostIndex]}...`);
         tryConnect();
       } else {
-        onError?.(err);
+        onError?.(new Event("error"));
       }
     };
 
@@ -171,9 +180,8 @@ const POPULAR_PAIRS = [
 
 export async function fetchActiveCryptoPairs(): Promise<string[]> {
   try {
-    const res = await fetch(buildUrl("/api/v3/ticker/price"), {
-      cache: "no-store",
-    });
+    // Panggil proxy (semua pair tanpa ?symbol)
+    const res = await fetch(proxyUrl("/api/crypto/price"), { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data: { symbol: string }[] = await res.json();
@@ -189,7 +197,7 @@ export async function fetchActiveCryptoPairs(): Promise<string[]> {
     return [...POPULAR_PAIRS.filter((p) => usdtPairs.includes(p)), ...others];
 
   } catch (err) {
-    console.error("[Binance Vision] Gagal ambil daftar pairs:", err);
+    console.error("[Binance] Gagal ambil daftar pairs:", err);
     return POPULAR_PAIRS;
   }
 }

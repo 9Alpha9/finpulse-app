@@ -17,7 +17,7 @@ import {
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import {
   fetchCryptoPrice,
-  fetchAllCryptoKlines,
+  fetchCryptoKlines,
   connectCryptoWebSocket,
   fetchActiveCryptoPairs,
   KlineData,
@@ -278,7 +278,7 @@ export default function CryptoPanel() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [isLoadingChart, setIsLoadingChart] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false); // background history load
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const priceRef = useRef(currentPrice);
@@ -288,6 +288,8 @@ export default function CryptoPanel() {
   const candlestickSeriesRef = useRef<any>(null);
   const lastBarRef = useRef<KlineData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Cache: Map<"BTCUSDT_1d" → KlineData[]> agar ganti timeframe tidak perlu fetch ulang
+  const klineCache = useRef<Map<string, KlineData[]>>(new Map());
 
   // ── Format helpers ──────────────────────────────────────────────────────────
 
@@ -348,56 +350,140 @@ export default function CryptoPanel() {
     }
   }, [interval]);
 
-  // ── 1. Load ALL historical klines via paginated Binance API ─────────────────
+  // ── 1. Load klines — fast 2-phase: instant preview → background full history ──
 
   useEffect(() => {
     let active = true;
+    const cacheKey = `${symbol}_${interval}`;
+
+    /**
+     * Terapkan data ke chart series DAN update React state (untuk count display).
+     * Dipanggil langsung di dalam loadData agar guard `active` benar-benar efektif.
+     * Tidak melalui useEffect([chartData]) agar tidak ada race condition.
+     */
+    function applyToChart(data: KlineData[]) {
+      if (!active) return;
+      if (candlestickSeriesRef.current && chartRef.current) {
+        candlestickSeriesRef.current.setData(data);
+        // Reset auto-scale agar Y-axis menyesuaikan ke range harga koin baru
+        chartRef.current.priceScale("right").applyOptions({ autoScale: true });
+        // fitContent() dulu (fit semua data), lalu scrollToRealTime (ke candle terbaru)
+        chartRef.current.timeScale().fitContent();
+        chartRef.current.timeScale().scrollToRealTime();
+      }
+      setChartData(data);
+      if (data.length > 0) lastBarRef.current = data[data.length - 1];
+    }
 
     async function loadData() {
-      setIsLoadingChart(true);
-      setLoadingProgress(0);
       setErrorBanner(null);
+      setLoadingMore(false);
 
+      // Reset harga agar tidak tampilkan harga koin/timeframe sebelumnya
+      // (penting untuk user non-premium yang tidak punya WebSocket effect)
+      setCurrentPrice(0);
+      setPriceChange(0);
+
+      // ── Bersihkan chart dulu agar tidak ada sisa data interval/symbol sebelumnya ──
+      if (candlestickSeriesRef.current) {
+        candlestickSeriesRef.current.setData([]);
+        chartRef.current?.priceScale("right").applyOptions({ autoScale: true });
+      }
+
+      // ── FASE 0: Cache hit → tampil instan tanpa loading spinner ──
+      const cached = klineCache.current.get(cacheKey);
+      if (cached && cached.length > 0) {
+        applyToChart(cached);
+        setIsLoadingChart(false);
+        // Refresh harga terkini di background (tidak blocking)
+        fetchCryptoPrice(symbol)
+          .then((p) => { if (active) setCurrentPrice(p); })
+          .catch(() => {});
+        return;
+      }
+
+      // ── FASE 1: 1 batch saja (1000 candle terbaru) → chart muncul ~500ms ──
+      setIsLoadingChart(true);
       try {
-        // Fetch harga saat ini secara paralel
-        const [price, klines] = await Promise.all([
+        const [price, firstBatch] = await Promise.all([
           fetchCryptoPrice(symbol),
-          fetchAllCryptoKlines(symbol, interval, (count) => {
-            if (active) setLoadingProgress(count);
-          }),
+          fetchCryptoKlines(symbol, interval, 1000),
         ]);
 
         if (!active) return;
         setCurrentPrice(price);
-        setChartData(klines);
-        if (klines.length > 0) lastBarRef.current = klines[klines.length - 1];
+        applyToChart(firstBatch);          // langsung ke series, tidak lewat state
+        setIsLoadingChart(false);
+
+        // ── FASE 2: Background — paginate history lama tanpa blokir UI ──
+        if (firstBatch.length < 1000) {
+          klineCache.current.set(cacheKey, firstBatch);
+          return;
+        }
+
+        setLoadingMore(true);
+        const LIMIT = 1000;
+        const MAX_EXTRA = 50;
+        let all = [...firstBatch];
+        let endTime = firstBatch[0].time * 1000 - 1;
+        let batchCount = 0;
+
+        while (active && batchCount < MAX_EXTRA) {
+          const older = await fetchCryptoKlines(symbol, interval, LIMIT, endTime);
+          if (!older || older.length === 0) break;
+
+          // Deduplikasi + sort sebelum terapkan
+          const combined = [...older, ...all];
+          const seen = new Set<number>();
+          const merged = combined.filter((k) => {
+            if (seen.has(k.time)) return false;
+            seen.add(k.time);
+            return true;
+          });
+          merged.sort((a, b) => a.time - b.time);
+          all = merged;
+
+          applyToChart(all);               // guard `active` ada di dalam applyToChart
+
+          if (older.length < LIMIT) break;
+          endTime = older[0].time * 1000 - 1;
+          batchCount++;
+        }
+
+        if (active) {
+          klineCache.current.set(cacheKey, all);
+          setLoadingMore(false);
+        }
 
       } catch (err) {
         if (!active) return;
-        console.error("Error loading data from Binance:", err);
+        console.error("[CryptoPanel] Error loading Binance data:", err);
+        setIsLoadingChart(false);
+        setLoadingMore(false);
         setErrorBanner("Gagal mengambil data Binance. Menggunakan mode simulasi...");
 
-        // Fallback data
         const fakeTime = Math.floor(Date.now() / 1000);
         let base = 68000.0;
         if (symbol.includes("ETH")) base = 3500.0;
+        if (symbol.includes("BNB")) base = 600.0;
         if (symbol.includes("SOL")) base = 150.0;
-        if (symbol.includes("PEPE")) base = 0.000012;
+        if (symbol.includes("XRP")) base = 0.5;
+        if (symbol.includes("ADA")) base = 0.45;
+        if (symbol.includes("PEPE") || symbol.includes("SHIB")) base = 0.000012;
 
-        const fakeKlines: KlineData[] = Array.from({ length: 300 }, (_, i) => ({
-          time: fakeTime - (299 - i) * 86400,
-          open: base * (1 + (Math.random() - 0.5) * 0.05),
-          high: base * (1 + Math.random() * 0.05),
-          low: base * (1 - Math.random() * 0.05),
-          close: base,
-        }));
-        setChartData(fakeKlines);
-        lastBarRef.current = fakeKlines[fakeKlines.length - 1];
-      } finally {
-        if (active) {
-          setIsLoadingChart(false);
-          setLoadingProgress(0);
-        }
+        const fakeKlines: KlineData[] = Array.from({ length: 300 }, (_, i) => {
+          const noise = (Math.random() - 0.5) * 0.04;
+          const o = base * (1 + noise);
+          const c = base * (1 + (Math.random() - 0.5) * 0.04);
+          return {
+            time: fakeTime - (299 - i) * 86400,
+            open:  o,
+            high:  Math.max(o, c) * (1 + Math.random() * 0.02),
+            low:   Math.min(o, c) * (1 - Math.random() * 0.02),
+            close: c,
+          };
+        });
+        applyToChart(fakeKlines);
       }
     }
 
@@ -467,15 +553,9 @@ export default function CryptoPanel() {
     }
   }, [theme, symbol, interval]);
 
-  // ── 3. Set chart data setelah klines dimuat ──────────────────────────────────
-
-  useEffect(() => {
-    if (candlestickSeriesRef.current && chartData.length > 0) {
-      candlestickSeriesRef.current.setData(chartData);
-      // Scroll ke candle terbaru
-      chartRef.current?.timeScale().scrollToRealTime();
-    }
-  }, [chartData]);
+  // ── 3. [DIHAPUS] setData kini dipanggil langsung di loadData (lihat applyToChart)
+  //      Tidak ada lagi useEffect([chartData]) yang bisa mengaplikasikan data
+  //      usang dari interval/symbol sebelumnya.
 
   // ── Cleanup saat unmount ─────────────────────────────────────────────────────
 
@@ -491,28 +571,39 @@ export default function CryptoPanel() {
     };
   }, []);
 
-  // ── 4. Real-time WebSocket (Premium only) ────────────────────────────────────
+  // ── 4. Real-time price update (WebSocket premium, REST fallback) ─────────────
 
   useEffect(() => {
-    if (!isPremium || isLoadingChart) return;
+    if (!isPremium) return;
+
+    // Reset harga saat symbol berganti agar tidak tampil harga koin sebelumnya
+    setCurrentPrice(0);
+    setPriceChange(0);
 
     let ws: WebSocket | null = null;
     let fallback: NodeJS.Timeout | null = null;
+    let active = true;
     let gotWs = false;
 
     const startFallback = () => {
-      if (fallback) return;
+      if (fallback || !active) return;
       fallback = setInterval(async () => {
+        if (!active) return;
         try {
           const p = await fetchCryptoPrice(symbol);
-          setCurrentPrice(p);
-          updateCandle(p);
+          if (active) {
+            setCurrentPrice(p);
+            updateCandle(p);
+          }
         } catch {
-          const drift = (Math.random() - 0.5) * priceRef.current * 0.0005;
-          const dec = symbol.includes("PEPE") ? 8 : 2;
-          const p = parseFloat((priceRef.current + drift).toFixed(dec));
-          setCurrentPrice(p);
-          updateCandle(p);
+          // Jangan pakai priceRef saat harga belum diinisialisasi
+          if (active && priceRef.current > 0) {
+            const drift = (Math.random() - 0.5) * priceRef.current * 0.0005;
+            const dec = symbol.includes("PEPE") || symbol.includes("SHIB") ? 8 : 2;
+            const p = parseFloat((priceRef.current + drift).toFixed(dec));
+            setCurrentPrice(p);
+            updateCandle(p);
+          }
         }
       }, 3000);
     };
@@ -521,6 +612,7 @@ export default function CryptoPanel() {
       ws = connectCryptoWebSocket(
         symbol,
         ({ price, changePercent }) => {
+          if (!active) return;
           gotWs = true;
           setCurrentPrice(price);
           setPriceChange(changePercent);
@@ -528,19 +620,24 @@ export default function CryptoPanel() {
         },
         startFallback
       );
-      ws.onclose = startFallback;
+      ws.onclose = () => { if (active) startFallback(); };
 
-      const timer = setTimeout(() => { if (!gotWs) startFallback(); }, 4000);
+      // Jika WebSocket tidak respond dalam 4 detik, pakai REST polling
+      const timer = setTimeout(() => { if (!gotWs && active) startFallback(); }, 4000);
       return () => {
+        active = false;
         clearTimeout(timer);
         ws?.close();
         if (fallback) clearInterval(fallback);
       };
     } catch {
       startFallback();
-      return () => { if (fallback) clearInterval(fallback); };
+      return () => {
+        active = false;
+        if (fallback) clearInterval(fallback);
+      };
     }
-  }, [isPremium, symbol, interval, isLoadingChart, updateCandle]);
+  }, [isPremium, symbol, updateCandle]);
 
   // ── Filtered pairs ───────────────────────────────────────────────────────────
 
@@ -586,7 +683,9 @@ export default function CryptoPanel() {
           <div>
             <div className="text-sm font-semibold text-muted-foreground">Harga Live</div>
             <h3 className="text-2xl font-extrabold tracking-tight text-foreground">
-              ${formatPrice(currentPrice)}
+              {currentPrice === 0
+                ? <span className="text-muted-foreground animate-pulse">···</span>
+                : `$${formatPrice(currentPrice)}`}
             </h3>
           </div>
           <div>
@@ -703,13 +802,21 @@ export default function CryptoPanel() {
             )}
           </div>
 
-          {/* Candle count info */}
-          {!isLoadingChart && chartData.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground select-none">
-              <History className="h-3 w-3" />
-              <span>{chartData.length.toLocaleString("id-ID")} candle</span>
-            </div>
-          )}
+          {/* Candle count + background history indicator */}
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground select-none">
+            {!isLoadingChart && chartData.length > 0 && (
+              <>
+                <History className="h-3 w-3" />
+                <span>{chartData.length.toLocaleString("id-ID")} candle</span>
+              </>
+            )}
+            {loadingMore && (
+              <span className="flex items-center gap-1 text-[9px] font-bold text-brand-green/70 bg-brand-green/10 px-2 py-0.5 rounded-full animate-pulse">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                memuat histori...
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Chart Container */}
@@ -736,20 +843,11 @@ export default function CryptoPanel() {
             </div>
           )}
 
-          {/* Loading Overlay */}
+          {/* Loading Overlay — hanya saat fetch batch pertama */}
           {isLoadingChart && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20 bg-card rounded-xl">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-green" />
-              {loadingProgress > 0 && (
-                <div className="flex flex-col items-center gap-1">
-                  <p className="text-xs text-muted-foreground">
-                    Memuat data historis...
-                  </p>
-                  <p className="text-xs font-bold text-brand-green">
-                    {loadingProgress.toLocaleString("id-ID")} candle
-                  </p>
-                </div>
-              )}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-20 bg-card rounded-xl">
+              <Loader2 className="h-7 w-7 animate-spin text-brand-green" />
+              <p className="text-xs text-muted-foreground font-semibold">Memuat grafik...</p>
             </div>
           )}
 

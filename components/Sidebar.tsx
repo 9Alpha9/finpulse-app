@@ -8,11 +8,12 @@ import {
   Bell,
   Newspaper,
   X,
-  ChevronRight
+  ChevronRight,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/app/utils/cn";
 
-export type DashboardTab = "overview" | "crypto" | "stocks" | "signals" | "news";
+export type DashboardTab = "overview" | "crypto" | "stocks" | "signals" | "news" | "portfolio";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -22,11 +23,12 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { id: "overview", name: "Overview", icon: Home },
-  { id: "crypto", name: "Crypto Panel", icon: Coins },
-  { id: "stocks", name: "Stocks Panel", icon: TrendingUp },
-  { id: "signals", name: "WhatsApp Signals", icon: Bell },
-  { id: "news", name: "News Feed", icon: Newspaper }
+  { id: "overview",   name: "Overview",          icon: Home },
+  { id: "crypto",     name: "Crypto Panel",      icon: Coins },
+  { id: "stocks",     name: "Stocks Panel",      icon: TrendingUp },
+  { id: "portfolio",  name: "Portfolio & Watchlist", icon: Wallet },
+  { id: "signals",    name: "WhatsApp Signals",  icon: Bell },
+  { id: "news",       name: "News Feed",          icon: Newspaper }
 ] as const;
 
 export default function Sidebar({ isOpen, onClose, activeTab, setActiveTab }: SidebarProps) {
