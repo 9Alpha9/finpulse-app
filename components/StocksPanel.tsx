@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -13,6 +13,7 @@ import {
   Star,
 } from "lucide-react";
 import { getLocalWatchlist, saveLocalWatchlist } from "@/app/utils/supabase";
+import { saveWatchlistV2, loadWatchlistV2, WatchlistItem } from "@/components/PortfolioWatchlistPanel";
 import {
   getStockInfo,
   fetchStockKlinesFromYahoo,
@@ -21,7 +22,7 @@ import {
   StockKline,
   StockInfo,
 } from "@/src/lib/stocks";
-import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
+import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
@@ -253,7 +254,6 @@ export default function StocksPanel() {
   const { theme } = useThemeAuth();
 
   const [selectedStock, setSelectedStock] = useState<string>("BBCA");
-  const [watchlist, setWatchlist]         = useState<string[]>([]);
   const [isSelectOpen, setIsSelectOpen]   = useState(false);
 
   const [isLoadingChart, setIsLoadingChart] = useState(true);
@@ -263,18 +263,19 @@ export default function StocksPanel() {
   const [interval, setIntervalState]        = useState<string>("1d");
   const [errorBanner, setErrorBanner]       = useState<string | null>(null);
 
-  const chartContainerRef   = useRef<HTMLDivElement>(null);
-  const chartRef            = useRef<any>(null);
-  const candlestickSeriesRef= useRef<any>(null);
-  const dropdownRef         = useRef<HTMLDivElement>(null);
+  const chartContainerRef    = useRef<HTMLDivElement>(null);
+  const chartRef             = useRef<IChartApi | null>(null);
+  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const dropdownRef          = useRef<HTMLDivElement>(null);
   // Cache per "BBCA_1d" agar ganti timeframe tidak perlu refetch ulang
-  const klineCache          = useRef<Map<string, StockKline[]>>(new Map());
+  const klineCache           = useRef<Map<string, StockKline[]>>(new Map());
+  // Resize handler ref untuk cleanup yang benar
+  const resizeHandlerRef     = useRef<(() => void) | null>(null);
 
-  // ── Sync watchlist on mount ──────────────────────────────────────────────────
-
-  useEffect(() => {
-    setWatchlist(getLocalWatchlist());
-  }, []);
+  // watchlist V2: disimpan di format yang sama dengan PortfolioWatchlistPanel
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(
+    () => typeof window !== "undefined" ? loadWatchlistV2() : []
+  );
 
   // ── Close stock selector on outside click ───────────────────────────────────
 
@@ -297,7 +298,9 @@ export default function StocksPanel() {
     function applyToChart(data: StockKline[]) {
       if (!active) return;
       if (candlestickSeriesRef.current && chartRef.current) {
-        candlestickSeriesRef.current.setData(data);
+        // StockKline shape (time, open, high, low, close) sesuai dengan CandlestickData
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        candlestickSeriesRef.current.setData(data as any);
         chartRef.current.priceScale("right").applyOptions({ autoScale: true });
         chartRef.current.timeScale().fitContent();
         chartRef.current.timeScale().scrollToRealTime();
@@ -352,7 +355,7 @@ export default function StocksPanel() {
         } else {
           throw new Error("Data kline kosong.");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return;
         console.warn(`[StocksPanel] Gagal fetch ${selectedStock}:`, err);
         setErrorBanner("Gagal mengambil data Yahoo Finance. Menggunakan mode simulasi...");
@@ -419,8 +422,8 @@ export default function StocksPanel() {
       candlestickSeriesRef.current = series;
 
       const handleResize = () => chartRef.current?.resize(container.clientWidth, 300);
+      resizeHandlerRef.current = handleResize;
       window.addEventListener("resize", handleResize);
-      (chartRef.current as any).__handleResize = handleResize;
     } else {
       chartRef.current.applyOptions(chartOptions);
     }
@@ -430,9 +433,10 @@ export default function StocksPanel() {
 
   useEffect(() => {
     return () => {
+      if (resizeHandlerRef.current) {
+        window.removeEventListener("resize", resizeHandlerRef.current);
+      }
       if (chartRef.current) {
-        const h = (chartRef.current as any).__handleResize;
-        if (h) window.removeEventListener("resize", h);
         chartRef.current.remove();
         chartRef.current = null;
         candlestickSeriesRef.current = null;
@@ -440,16 +444,28 @@ export default function StocksPanel() {
     };
   }, []);
 
-  // ── Watchlist toggle ─────────────────────────────────────────────────────────
+  // ── Watchlist toggle (sync ke PortfolioWatchlistPanel via localStorage V2) ──
 
-  const isInWatchlist = watchlist.includes(selectedStock);
+  const stockMeta = stockTickers[selectedStock];
+  const isInWatchlist = watchlist.some((w) => w.symbol === selectedStock);
 
   const toggleWatchlist = () => {
-    const next = isInWatchlist
-      ? watchlist.filter((s) => s !== selectedStock)
-      : [...watchlist, selectedStock];
+    let next: WatchlistItem[];
+    if (isInWatchlist) {
+      next = watchlist.filter((w) => w.symbol !== selectedStock);
+    } else {
+      next = [
+        ...watchlist,
+        {
+          symbol:  selectedStock,
+          market:  "stocks" as const,
+          name:    stockMeta?.name ?? selectedStock,
+          addedAt: Date.now(),
+        },
+      ];
+    }
     setWatchlist(next);
-    saveLocalWatchlist(next);
+    saveWatchlistV2(next);
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -467,7 +483,7 @@ export default function StocksPanel() {
         </div>
       )}
 
-      {/* Stock Header */}
+      {/* Stock Header — sama persis dengan CryptoPanel */}
       {stock && (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-center gap-4">
@@ -483,24 +499,39 @@ export default function StocksPanel() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 text-right">
+          {/* Harga + Perubahan — gaya CryptoPanel */}
+          <div className="flex items-baseline gap-6 text-right">
             <div>
-              <div className="text-sm font-semibold text-muted-foreground">Harga Terakhir</div>
-              <h3 className="text-2xl font-extrabold tracking-tight text-foreground">
+              <div className="text-sm font-semibold text-muted-foreground mb-1">Harga Terakhir</div>
+              <motion.h3
+                animate={{
+                  color: stock.change > 0
+                    ? "#089981"
+                    : stock.change < 0
+                    ? "#f23645"
+                    : (theme === "dark" ? "#f8fafc" : "#0f172a"),
+                }}
+                transition={{ duration: 0.3 }}
+                className="text-2xl font-extrabold tracking-tight px-1 py-0.5"
+              >
                 {stock.price === 0
                   ? <span className="text-muted-foreground animate-pulse">···</span>
                   : `Rp ${stock.price.toLocaleString("id-ID")}`}
-              </h3>
+              </motion.h3>
             </div>
             <div>
-              <div className="text-sm font-semibold text-muted-foreground">Perubahan</div>
-              <div className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${stock.change >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+              <div className="text-sm font-semibold text-muted-foreground mb-1">Perubahan Harian</div>
+              <div
+                className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${
+                  stock.change >= 0 ? "text-[#089981]" : "text-[#f23645]"
+                }`}
+              >
                 {stock.change >= 0
                   ? <ArrowUpRight className="h-4 w-4" />
                   : <ArrowDownRight className="h-4 w-4" />}
                 <span>
-                  {stock.change >= 0 ? "+" : ""}
-                  {stock.change.toLocaleString("id-ID")} ({stock.changePercent.toFixed(2)}%)
+                  {stock.change >= 0 ? "+" : ""}{stock.change.toLocaleString("id-ID")}
+                  &nbsp;({stock.changePercent.toFixed(2)}%)
                 </span>
               </div>
             </div>

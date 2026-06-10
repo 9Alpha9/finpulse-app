@@ -25,7 +25,7 @@ import {
 import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
-import TechnicalsGauge from "@/components/TechnicalsGauge"; // Sesuaikan dengan lokasi foldermu
+import TechnicalsGauge from "@/components/TechnicalsGauge";
 import { div } from "framer-motion/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -630,18 +630,14 @@ export default function CryptoPanel() {
             </p>
           </div>
         </div>
-
         <div className="flex items-baseline gap-6 text-right">
-
-          {/* BLOK HARGA LIVE DENGAN WARNA TRADINGVIEW */}
           <div>
             <div className="text-sm font-semibold text-muted-foreground mb-1">Harga Live</div>
-            {/* Animasi warna mulus tanpa mengubah background, murni text color */}
             <motion.h3
               animate={{
                 color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : (theme === "dark" ? "#f8fafc" : "#0f172a"),
               }}
-              transition={{ duration: 0.1 }} // Transisi sangat cepat agar responsif seperti market
+              transition={{ duration: 0.1 }}
               className="text-2xl font-extrabold tracking-tight px-1 py-0.5"
             >
               {currentPrice === 0
@@ -649,7 +645,6 @@ export default function CryptoPanel() {
                 : `$${formatPrice(currentPrice)}`}
             </motion.h3>
           </div>
-
           {/* BLOK PERUBAHAN 24J */}
           <div>
             <div className="text-sm font-semibold text-muted-foreground mb-1">Perubahan 24j</div>
@@ -663,7 +658,6 @@ export default function CryptoPanel() {
               <span>{priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%</span>
             </div>
           </div>
-
         </div>
       </div>
 

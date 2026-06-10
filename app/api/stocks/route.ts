@@ -8,33 +8,63 @@ export async function GET(req: NextRequest) {
 
     // Map standard intervals to Yahoo intervals & ranges
     let yahooInterval = "1d";
-    let yahooRange = "1y";
+    let yahooRange = "max";
 
     switch (interval) {
+      case "1m":
+        yahooInterval = "1m";
+        yahooRange = "1d";
+        break;
+      case "2m":
+        yahooInterval = "2m";
+        yahooRange = "5d";
+        break;
+      case "5m":
+        yahooInterval = "5m";
+        yahooRange = "5d";
+        break;
       case "15m":
         yahooInterval = "15m";
         yahooRange = "5d";
         break;
-      case "1h":
-        yahooInterval = "1h";
+      case "30m":
+        yahooInterval = "30m";
         yahooRange = "1mo";
         break;
-      case "4h":
-        yahooInterval = "1h"; // fallback
+      case "60m":
+      case "1h":
+        yahooInterval = "60m";
+        yahooRange = "3mo";
+        break;
+      case "90m":
+        yahooInterval = "90m";
         yahooRange = "3mo";
         break;
       case "1d":
         yahooInterval = "1d";
-        yahooRange = "1y";
+        yahooRange = "max";  // semua data dari awal listing
         break;
+      case "5d":
+        yahooInterval = "5d";
+        yahooRange = "max";
+        break;
+      case "1wk":
       case "1w":
         yahooInterval = "1wk";
-        yahooRange = "2y";
+        yahooRange = "max";
         break;
+      case "1mo":
       case "1M":
         yahooInterval = "1mo";
-        yahooRange = "5y";
+        yahooRange = "max";
         break;
+      case "3mo":
+        yahooInterval = "3mo";
+        yahooRange = "max";
+        break;
+      default:
+        yahooInterval = "1d";
+        yahooRange = "max";
     }
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${yahooInterval}&range=${yahooRange}`;
