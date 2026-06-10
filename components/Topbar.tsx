@@ -52,7 +52,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
 
         <div className="block sm:hidden">
-          <span className="text-md font-bold text-foreground">ArthaVerse</span>
+          <span className="text-md font-bold text-foreground">FinPulse</span>
         </div>
       </div>
 

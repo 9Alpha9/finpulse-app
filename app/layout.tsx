@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ArthaVerse - Smart Financial Dashboard",
-  description: "Manage your portfolio, track expenses, and grow your wealth with ArthaVerse.",
+  title: "FinPulse - Smart Financial Dashboard",
+  description: "Manage your portfolio, track expenses, and grow your wealth with FinPulse.",
 };
 
 export default function RootLayout({

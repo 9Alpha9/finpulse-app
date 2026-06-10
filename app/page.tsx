@@ -76,7 +76,7 @@ export default function DashboardPage() {
                       <TrendingUp className="h-4.5 w-4.5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Terminal Transaksi ArthaVerse</h3>
+                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Terminal Transaksi FinPulse</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Analisis instrumen pasar finansial secara real-time</p>
                     </div>
                   </div>
