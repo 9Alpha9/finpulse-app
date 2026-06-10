@@ -71,9 +71,9 @@ export async function fetchCryptoKlines(
   const raw: any[][] = await res.json();
   return raw.map((item) => ({
     time: Math.floor(item[0] / 1000), // openTime ms → detik
-    open:  parseFloat(item[1]),
-    high:  parseFloat(item[2]),
-    low:   parseFloat(item[3]),
+    open: parseFloat(item[1]),
+    high: parseFloat(item[2]),
+    low: parseFloat(item[3]),
     close: parseFloat(item[4]),
   }));
 }
@@ -199,5 +199,51 @@ export async function fetchActiveCryptoPairs(): Promise<string[]> {
   } catch (err) {
     console.error("[Binance] Gagal ambil daftar pairs:", err);
     return POPULAR_PAIRS;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Market Screener (Top Gainers / Losers 24h)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MarketTicker {
+  symbol: string;
+  lastPrice: string;
+  priceChangePercent: string;
+  volume: string;
+}
+
+export async function fetchTopGainersLosers(): Promise<{ gainers: MarketTicker[], losers: MarketTicker[] }> {
+  try {
+    const res = await fetch("https://data-api.binance.vision/api/v3/ticker/24hr", { cache: "no-store" });
+    if (!res.ok) throw new Error("Gagal mengambil data 24hr ticker");
+
+    const data: MarketTicker[] = await res.json();
+
+    // Filter hanya USDT, pastikan ada volume agar tidak mengambil koin mati
+    const usdtPairs = data.filter(t => t.symbol.endsWith("USDT") && parseFloat(t.volume) > 10000);
+
+    // Sort berdasarkan persentase
+    usdtPairs.sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent));
+
+    return {
+      gainers: usdtPairs.slice(0, 5), // Top 5 Naik
+      losers: usdtPairs.slice(-5).reverse() // Top 5 Turun
+    };
+  } catch (err) {
+    console.error("[Screener] Error:", err);
+    // Fallback Mock Data jika API bermasalah
+    return {
+      gainers: [
+        { symbol: "PEPEUSDT", lastPrice: "0.000014", priceChangePercent: "15.2", volume: "100M" },
+        { symbol: "SOLUSDT", lastPrice: "165.20", priceChangePercent: "8.4", volume: "50M" },
+        { symbol: "AVAXUSDT", lastPrice: "42.10", priceChangePercent: "5.1", volume: "10M" },
+      ],
+      losers: [
+        { symbol: "WIFUSDT", lastPrice: "2.40", priceChangePercent: "-12.5", volume: "80M" },
+        { symbol: "XRPUSDT", lastPrice: "0.45", priceChangePercent: "-4.2", volume: "200M" },
+        { symbol: "ADAUSDT", lastPrice: "0.38", priceChangePercent: "-3.1", volume: "45M" },
+      ]
+    };
   }
 }

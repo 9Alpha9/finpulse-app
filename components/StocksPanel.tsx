@@ -25,6 +25,7 @@ import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from
 import { motion, AnimatePresence } from "framer-motion";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
+import PaperTrading from "./PaperTrading";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IDX Stock Logo Component
@@ -184,7 +185,7 @@ const getThemeColors = (isDark: boolean) => ({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TimeframeDropdown
+// TimeframeDropdown (Telah Disempurnakan: Posisi & Layout Melar Otomatis)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TimeframeDropdown = ({
@@ -196,6 +197,7 @@ const TimeframeDropdown = ({
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
   const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
 
   useEffect(() => {
@@ -206,50 +208,83 @@ const TimeframeDropdown = ({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "unset";
+    return () => { document.body.style.overflow = "unset"; };
+  }, [open]);
+
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
+        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs sm:text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
       >
         <span className="text-brand-green">{selected?.label ?? value}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.14 }}
-            className="absolute left-0 mt-1.5 w-60 rounded-xl border border-border bg-card shadow-xl p-2 z-50 max-h-[60vh] overflow-y-auto"
-          >
-            {TIMEFRAME_GROUPS.map((group) => (
-              <div key={group.group} className="mb-2 last:mb-0">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                  {group.group}
+          <>
+            {/* Backdrop Gelap Khusus Mobile */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
+              onClick={() => setOpen(false)}
+            />
+
+            {/* Panel Pilihan Waktu */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 30 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              // PERUBAHAN UTAMA: sm:left-0 dan penyesuaian lebar sm:w-[300px]
+              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
+            >
+              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden" />
+
+              <div className="max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
+                <div className="px-1 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 sm:mb-1.5 border-b border-border/50 pb-2">
+                  Pilih Rentang Waktu
                 </div>
-                <div className="grid grid-cols-4 gap-1">
-                  {group.items.map((item) => {
-                    const isActive = item.value === value;
-                    return (
-                      <button
-                        key={item.value}
-                        onClick={() => { onChange(item.value); setOpen(false); }}
-                        className={`rounded-md py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
-                          ? "bg-brand-green text-white shadow-sm shadow-brand-green/30"
-                          : "text-foreground hover:bg-secondary"
-                          }`}
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
+
+                {TIMEFRAME_GROUPS.map((group) => (
+                  <div key={group.group} className="mb-3.5 last:mb-0">
+                    <div className="px-1 py-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">
+                      {group.group}
+                    </div>
+                    {/* Menggunakan flex-wrap dan flex-1 agar tombol mengisi ruang dengan rapi */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {group.items.map((item) => {
+                        const isActive = item.value === value;
+                        return (
+                          <button
+                            key={item.value}
+                            onClick={() => {
+                              onChange(item.value);
+                              setOpen(false);
+                            }}
+                            className={`rounded-lg sm:rounded-md px-3 py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center flex-1 min-w-[50px] ${isActive
+                                ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
+                                : "text-foreground bg-secondary/30 sm:bg-secondary/40 hover:bg-secondary"
+                              }`}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>
@@ -663,12 +698,20 @@ export default function StocksPanel() {
 
       {/* Portfolio Tracker & Signal Configurator */}
       {stock && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <PortfolioTracker currentPrice={stock.price} activeSymbol={selectedStock} isStock={true} />
           <SignalConfigurator activeSymbol={selectedStock} currentPrice={stock.price} />
         </div>
       )}
 
+      {/* Letakkan di baris paling bawah, sebelum penutup tag div utama */}
+      <div>
+        <PaperTrading
+          activeSymbol={selectedStock}
+          marketType="stocks"
+          currentPrice={stock?.price || 0}
+        />
+      </div>
     </div>
   );
 }

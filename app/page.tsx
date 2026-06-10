@@ -20,12 +20,17 @@ import NewsPanel from "@/components/NewsPanel";
 import TechnicalsGauge, { KlineBasic } from "@/components/TechnicalsGauge";
 import PortfolioWatchlistPanel from "@/components/PortfolioWatchlistPanel";
 import GoldPanel from "@/components/GoldPanel";
+import MarketScreener from "@/components/MarketScreener";
+import EconomicCalendar from "@/components/EconomicCalendar";
+import BottomNav from "@/components/BottomNav";
+import ProfilePanel from "@/components/ProfilePanel";
 
 import {
   ChevronRight,
   Loader2,
   TrendingUp,
-  Activity
+  Activity,
+  User
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -122,7 +127,7 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading } = useThemeAuth();
-
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
@@ -144,6 +149,21 @@ export default function DashboardPage() {
   // Render active panel view
   const renderPanelContent = () => {
     switch (activeTab) {
+      case "profile":
+        return (
+          <motion.div key="profile" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
+            <div className="flex items-center gap-3 mb-6 px-1">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-green/15 text-brand-green">
+                <User className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-black text-foreground tracking-tight uppercase">Pengaturan Profil</h1>
+                <p className="text-xs text-muted-foreground">Kelola akun dan preferensi langganan kamu</p>
+              </div>
+            </div>
+            <ProfilePanel />
+          </motion.div>
+        );
       case "overview":
         return (
           <motion.div
@@ -214,15 +234,19 @@ export default function DashboardPage() {
             </div>
 
             {/* RIGHT COLUMN: News feed & Personal Wealth stats */}
-            <div className="space-y-6 flex flex-col lg:max-h-[1600px]">
+            <div className="space-y-6 flex flex-col lg:max-h-full">
 
               {/* News feed */}
               <div className="bg-card rounded-2xl border border-border p-4 shadow-sm h-[550px] flex flex-col overflow-hidden">
                 <NewsPanel />
               </div>
 
+              {/* ── MARKET SCREENER (FITUR BARU) ── */}
+              {marketType === "crypto" && <MarketScreener />}
+              {/* ── ECONOMIC CALENDAR ── */}
+              <EconomicCalendar />
               {/* Checklist */}
-              <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              {/* <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <div className="flex items-start gap-4">
                   <div className="relative flex items-center justify-center h-12 w-12 rounded-full border-4 border-brand-green/20">
                     <div className="absolute inset-0 rounded-full border-4 border-brand-green border-r-transparent border-b-transparent animate-spin-slow" />
@@ -234,11 +258,10 @@ export default function DashboardPage() {
                   </div>
                   <ChevronRight className="h-4.5 w-4.5 text-muted-foreground self-center" />
                 </div>
-              </div>
-
-              <ReferralCard />
-              <SpendingCard isMounted={isMounted} />
-              <PortfolioCard isMounted={isMounted} />
+              </div> */}
+              {/* <SpendingCard isMounted={isMounted} /> */}
+              {/* <PortfolioCard isMounted={isMounted} /> */}
+              {/* <ReferralCard /> */}
             </div>
           </motion.div>
         );
@@ -325,12 +348,18 @@ export default function DashboardPage() {
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16 pb-24 lg:pb-6">
           <AnimatePresence mode="wait">
             {renderPanelContent()}
           </AnimatePresence>
         </main>
       </div>
+      {/* ── BOTTOM NAVIGATION (KHUSUS MOBILE) ── */}
+      <BottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onProfileClick={() => setSidebarOpen(true)}
+      />
     </div>
   );
 }

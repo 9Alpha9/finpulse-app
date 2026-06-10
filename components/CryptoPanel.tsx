@@ -25,6 +25,7 @@ import {
 import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
+import PaperTrading from "./PaperTrading";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -166,11 +167,7 @@ const CoinIcon = ({
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TimeframeDropdown
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TimeframeDropdown (Responsif Mobile & Desktop)
+// TimeframeDropdown (Telah Disempurnakan: Posisi & Layout Melar Otomatis)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TimeframeDropdown = ({
@@ -182,9 +179,9 @@ const TimeframeDropdown = ({
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
   const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
 
-  // Tutup dropdown jika klik di luar (khusus untuk mode Desktop)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -193,31 +190,28 @@ const TimeframeDropdown = ({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Kunci scroll layar utama saat pop-up terbuka di mobile
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "unset";
     return () => { document.body.style.overflow = "unset"; };
   }, [open]);
 
   return (
     <div className="relative" ref={ref}>
-      {/* Tombol Pemicu */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
+        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs sm:text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
       >
         <span className="text-brand-green">{selected?.label ?? value}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       <AnimatePresence>
         {open && (
           <>
-            {/* Latar Belakang Hitam Transparan (HANYA MUNCUL DI MOBILE) */}
+            {/* Backdrop Gelap Khusus Mobile */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -226,44 +220,51 @@ const TimeframeDropdown = ({
               onClick={() => setOpen(false)}
             />
 
-            {/* Panel Pilihan (Bottom Sheet di Mobile, Dropdown di Desktop) */}
+            {/* Panel Pilihan Waktu */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 30 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-2 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-xl sm:absolute sm:inset-auto sm:left-0 sm:mt-1.5 sm:w-64 max-h-[85vh] sm:max-h-[60vh] overflow-y-auto pb-8 sm:pb-2"
+              // PERUBAHAN UTAMA: sm:left-0 dan penyesuaian lebar sm:w-[300px]
+              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
             >
-              {/* Garis Handle Tarik (Hanya visual untuk estetika Mobile) */}
               <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden" />
 
-              {TIMEFRAME_GROUPS.map((group) => (
-                <div key={group.group} className="mb-4 sm:mb-2 last:mb-0">
-                  {/* Judul Kategori */}
-                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1 sm:mb-0">
-                    {group.group}
-                  </div>
-
-                  {/* Kotak Pilihan */}
-                  <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 sm:gap-1">
-                    {group.items.map((item) => {
-                      const isActive = item.value === value;
-                      return (
-                        <button
-                          key={item.value}
-                          onClick={() => { onChange(item.value); setOpen(false); }}
-                          className={`rounded-lg sm:rounded-md py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
-                            ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
-                            : "text-foreground bg-secondary/30 sm:bg-transparent hover:bg-secondary"
-                            }`}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div className="max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
+                <div className="px-1 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 sm:mb-1.5 border-b border-border/50 pb-2">
+                  Pilih Rentang Waktu
                 </div>
-              ))}
+
+                {TIMEFRAME_GROUPS.map((group) => (
+                  <div key={group.group} className="mb-3.5 last:mb-0">
+                    <div className="px-1 py-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">
+                      {group.group}
+                    </div>
+                    {/* Menggunakan flex-wrap dan flex-1 agar tombol mengisi ruang dengan rapi */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {group.items.map((item) => {
+                        const isActive = item.value === value;
+                        return (
+                          <button
+                            key={item.value}
+                            onClick={() => {
+                              onChange(item.value);
+                              setOpen(false);
+                            }}
+                            className={`rounded-lg sm:rounded-md px-3 py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center flex-1 min-w-[50px] ${isActive
+                                ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
+                                : "text-foreground bg-secondary/30 sm:bg-secondary/40 hover:bg-secondary"
+                              }`}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </motion.div>
           </>
         )}
@@ -834,6 +835,14 @@ export default function CryptoPanel() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <PortfolioTracker currentPrice={currentPrice} activeSymbol={symbol} isStock={false} />
         <SignalConfigurator activeSymbol={symbol} currentPrice={currentPrice} />
+      </div>
+      {/* Letakkan di baris paling bawah, sebelum penutup tag div utama */}
+      <div>
+        <PaperTrading
+          activeSymbol={symbol}
+          marketType="crypto"
+          currentPrice={currentPrice}
+        />
       </div>
     </div>
   );

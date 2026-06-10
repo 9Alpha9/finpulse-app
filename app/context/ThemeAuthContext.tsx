@@ -5,9 +5,14 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 type Theme = "light" | "dark";
 type SubscriptionTier = "free" | "premium";
 
+// 1. Kita tambahkan struktur user_metadata agar TypeScript tidak error
 interface User {
   email: string;
   name: string;
+  user_metadata?: {
+    full_name?: string;
+    avatar_url?: string;
+  };
 }
 
 interface ThemeAuthContextType {
@@ -35,7 +40,7 @@ export function ThemeAuthProvider({ children }: { children: React.ReactNode }) {
     const savedTheme = localStorage.getItem("theme") as Theme;
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const initialTheme = savedTheme || (systemPrefersDark ? "dark" : "light");
-    
+
     setTheme(initialTheme);
     if (initialTheme === "dark") {
       document.documentElement.classList.add("dark");
@@ -56,7 +61,7 @@ export function ThemeAuthProvider({ children }: { children: React.ReactNode }) {
     if (savedTier) {
       setSubscriptionTierState(savedTier);
     }
-    
+
     setIsLoading(false);
   }, []);
 
@@ -64,7 +69,7 @@ export function ThemeAuthProvider({ children }: { children: React.ReactNode }) {
     const nextTheme = theme === "light" ? "dark" : "light";
     setTheme(nextTheme);
     localStorage.setItem("theme", nextTheme);
-    
+
     if (nextTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
@@ -78,17 +83,32 @@ export function ThemeAuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = (email: string, name?: string): boolean => {
-    const mockUser = {
+    const defaultName = name || email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1);
+
+    // 2. Kita isi data mock ini dengan struktur yang benar saat login
+    const mockUser: User = {
       email,
-      name: name || email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1),
+      name: defaultName,
+      user_metadata: {
+        full_name: defaultName,
+      }
     };
+
     setUser(mockUser);
     localStorage.setItem("user", JSON.stringify(mockUser));
     return true;
   };
 
   const register = (email: string, name: string): boolean => {
-    const mockUser = { email, name };
+    // 3. Kita isi data mock ini dengan struktur yang benar saat register
+    const mockUser: User = {
+      email,
+      name,
+      user_metadata: {
+        full_name: name,
+      }
+    };
+
     setUser(mockUser);
     localStorage.setItem("user", JSON.stringify(mockUser));
     return true;
