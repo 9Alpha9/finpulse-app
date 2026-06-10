@@ -263,11 +263,11 @@ function TradingViewGauge({ value, signal }: { value: number; signal: Signal }) 
 
   return (
     <div className="relative w-full max-w-[280px] mx-auto select-none">
-      <span className="absolute top-10 left-0 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong sell</span>
+      <span className="absolute top-30 -left-4 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong sell</span>
       <span className="absolute top-2 left-10 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Sell</span>
       <span className="absolute -top-1 left-[43%] text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Neutral</span>
       <span className="absolute top-2 right-10 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Buy</span>
-      <span className="absolute top-10 right-0 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong buy</span>
+      <span className="absolute top-30 right-2 text-[9px] text-muted-foreground font-bold tracking-tighter uppercase">Strong buy</span>
 
       <svg viewBox="0 0 220 110" className="w-full mt-4">
         <path d={drawSimpleArc(180, 360)} stroke={trackGray} strokeWidth={7} fill="none" strokeLinecap="round" />
@@ -300,9 +300,10 @@ function RowActionBadge({ signal }: { signal: Signal }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TechnicalsGaugeProps {
-  klines: KlineBasic[];
-  symbol: string;
+  klines:   KlineBasic[];
+  symbol:   string;
   interval?: string;
+  market?:  "crypto" | "stocks";
 }
 
 export default function TechnicalsGauge({ klines, symbol, interval = "1D" }: TechnicalsGaugeProps) {
@@ -367,7 +368,7 @@ export default function TechnicalsGauge({ klines, symbol, interval = "1D" }: Tec
       </div>
 
       {/* SECTION 2: SEPARATED BREAKDOWN TABLES (Sektor Berbeda Sesuai TradingView) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 lg:grid-cols-1 gap-6">
 
         {/* KELOMPOK A: OSCILLATORS TABLE */}
         <div className="border border-border bg-card p-5 rounded-2xl shadow-sm flex flex-col">
