@@ -1,5 +1,5 @@
 /**
- * IDX Stock Data Provider for ArthaVerse
+ * IDX Stock Data Provider for FinPulse
  */
 
 export interface StockKline {

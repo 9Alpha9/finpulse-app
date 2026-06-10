@@ -231,7 +231,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1">
                     <h4 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Get your money's worth</h4>
-                    <p className="mt-0.5 text-xs text-foreground font-semibold">Selesaikan pembuatan profil ArthaVerse</p>
+                    <p className="mt-0.5 text-xs text-foreground font-semibold">Selesaikan pembuatan profil FinPulse</p>
                   </div>
                   <ChevronRight className="h-4.5 w-4.5 text-muted-foreground self-center" />
                 </div>

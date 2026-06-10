@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 export default function LoginPage() {
   const router = useRouter();
   const { user, login, theme, toggleTheme, isLoading } = useThemeAuth();
-  
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,7 +28,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    
+
     if (!email || !password) {
       setError("Semua field harus diisi");
       return;
@@ -47,10 +47,10 @@ export default function LoginPage() {
     setIsSubmitting(true);
     // Simulate API request delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    
+
     const success = login(email);
     setIsSubmitting(false);
-    
+
     if (success) {
       router.push("/");
     } else {
@@ -98,7 +98,7 @@ export default function LoginPage() {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 font-bold text-white shadow-lg">
             A
           </div>
-          <span className="text-xl font-bold tracking-tight text-white">ArthaVerse</span>
+          <span className="text-xl font-bold tracking-tight text-white">FinPulse</span>
         </div>
 
         <div className="relative z-20 mt-auto">
@@ -109,15 +109,15 @@ export default function LoginPage() {
             className="max-w-md"
           >
             <h2 className="text-3xl font-bold leading-tight tracking-tight text-white">
-              Cerdas Mengelola Keuangan Bersama ArthaVerse.
+              Cerdas Mengelola Keuangan Bersama FinPulse.
             </h2>
             <p className="mt-4 text-zinc-300 text-sm md:text-base leading-relaxed">
               Pantau kekayaan bersih Anda, lacak investasi, alokasikan anggaran pengeluaran, dan bangun masa depan finansial Anda di satu dasbor terintegrasi.
             </p>
           </motion.div>
-          
+
           <div className="mt-8 border-t border-zinc-800 pt-6 flex items-center justify-between text-xs text-zinc-400">
-            <span>&copy; 2026 ArthaVerse. Hak Cipta Dilindungi.</span>
+            <span>&copy; 2026 FinPulse. Hak Cipta Dilindungi.</span>
             <span className="flex gap-4">
               <a href="#" className="hover:text-white transition">Privasi</a>
               <a href="#" className="hover:text-white transition">Syarat & Ketentuan</a>
@@ -134,7 +134,7 @@ export default function LoginPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green font-bold text-white">
               A
             </div>
-            <span className="text-lg font-bold tracking-tight text-foreground">ArthaVerse</span>
+            <span className="text-lg font-bold tracking-tight text-foreground">FinPulse</span>
           </div>
 
           <div className="text-left">

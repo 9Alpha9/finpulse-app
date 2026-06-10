@@ -38,7 +38,7 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
 
   // Load portfolio from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("arthaverse_portfolio");
+    const saved = localStorage.getItem("finpulse_signals");
     if (saved) {
       try {
         setItems(JSON.parse(saved));
@@ -122,7 +122,7 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
 
     const updated = [...items, newItem];
     setItems(updated);
-    localStorage.setItem("arthaverse_portfolio", JSON.stringify(updated));
+    localStorage.setItem("finpulse_signals", JSON.stringify(updated));
 
     // Clear form inputs
     setSymbol("");
@@ -133,7 +133,7 @@ export function PortfolioTracker({ currentPrice, activeSymbol, isStock }: Portfo
   const handleDeleteItem = (id: string) => {
     const updated = items.filter((item) => item.id !== id);
     setItems(updated);
-    localStorage.setItem("arthaverse_portfolio", JSON.stringify(updated));
+    localStorage.setItem("finpulse_signals", JSON.stringify(updated));
   };
 
   const formatCurrency = (val: number, type: "crypto" | "stock") => {
