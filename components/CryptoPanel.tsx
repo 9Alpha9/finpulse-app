@@ -1,33 +1,136 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { ArrowUpRight, ArrowDownRight, Zap, Clock, ShieldAlert, Loader2, Search, Check, ChevronDown, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Zap,
+  Clock,
+  ShieldAlert,
+  Loader2,
+  Search,
+  Check,
+  ChevronDown,
+  AlertCircle,
+  History,
+} from "lucide-react";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
-import { fetchCryptoPrice, fetchCryptoKlines, connectCryptoWebSocket, fetchActiveCryptoPairs, KlineData } from "@/src/lib/binance";
-// PERBAIKAN 1: Tambahkan ColorType pada import di bawah ini
+import {
+  fetchCryptoPrice,
+  connectCryptoWebSocket,
+  fetchActiveCryptoPairs,
+  KlineData,
+} from "@/src/lib/binance";
 import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface TimeframeOption {
+  label: string;
+  value: string;
+  group: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants — Timeframe Groups
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIMEFRAME_GROUPS: { group: string; items: TimeframeOption[] }[] = [
+  {
+    group: "Detik",
+    items: [
+      { label: "1d", value: "1s", group: "Detik" },
+    ],
+  },
+  {
+    group: "Menit",
+    items: [
+      { label: "1m", value: "1m", group: "Menit" },
+      { label: "3m", value: "3m", group: "Menit" },
+      { label: "5m", value: "5m", group: "Menit" },
+      { label: "15m", value: "15m", group: "Menit" },
+      { label: "30m", value: "30m", group: "Menit" },
+    ],
+  },
+  {
+    group: "Jam",
+    items: [
+      { label: "1j", value: "1h", group: "Jam" },
+      { label: "2j", value: "2h", group: "Jam" },
+      { label: "4j", value: "4h", group: "Jam" },
+      { label: "6j", value: "6h", group: "Jam" },
+      { label: "8j", value: "8h", group: "Jam" },
+      { label: "12j", value: "12h", group: "Jam" },
+    ],
+  },
+  {
+    group: "Hari / Minggu",
+    items: [
+      { label: "1H", value: "1d", group: "Hari / Minggu" },
+      { label: "3H", value: "3d", group: "Hari / Minggu" },
+      { label: "1M", value: "1w", group: "Hari / Minggu" },
+    ],
+  },
+  {
+    group: "Bulan / Tahun",
+    items: [
+      { label: "1Bln", value: "1M", group: "Bulan / Tahun" },
+      { label: "3Bln", value: "3M", group: "Bulan / Tahun" },
+      { label: "6Bln", value: "6M", group: "Bulan / Tahun" },
+    ],
+  },
+];
+
+const ALL_TIMEFRAMES = TIMEFRAME_GROUPS.flatMap((g) => g.items);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MONTHS_ID = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agt", "Sep", "Okt", "Nov", "Des",
+];
+
+/**
+ * Format Unix timestamp (detik, UTC) ke string tanggal/jam
+ * tanpa offset timezone browser — sesuai standar Binance/TradingView.
+ *
+ * NOTE: Untuk timeframe 1D ke atas, Binance membuka candle di 00:00 UTC.
+ * Ini adalah perilaku BENAR dan sama seperti TradingView untuk crypto.
+ * Tidak perlu dikoreksi.
+ */
+const formatTimestampUTC = (ts: number): string => {
+  const d = new Date(ts * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${pad(d.getUTCDate())} ${MONTHS_ID[d.getUTCMonth()]} ${d.getUTCFullYear()}, ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+  );
+};
+
+const getThemeColors = (isDark: boolean) => ({
+  backgroundColor: isDark ? "#111827" : "#ffffff",
+  textColor: isDark ? "#94a3b8" : "#374151",
+  gridColor: isDark ? "#1f2937" : "#f3f4f6",
+  borderColor: isDark ? "#374151" : "#e5e7eb",
+});
+
+const getSymbolBase = (sym: string) => sym.replace("USDT", "");
+
 const getIntervalStartTimestamp = (intervalStr: string): number => {
   const now = Date.now();
-  if (intervalStr.endsWith("m")) {
-    const minutes = parseInt(intervalStr);
-    const ms = minutes * 60 * 1000;
-    return Math.floor(now / ms) * ms / 1000;
-  } else if (intervalStr.endsWith("h")) {
-    const hours = parseInt(intervalStr);
-    const ms = hours * 60 * 60 * 1000;
-    return Math.floor(now / ms) * ms / 1000;
-  } else if (intervalStr.endsWith("d")) {
-    const days = parseInt(intervalStr);
-    const ms = days * 24 * 60 * 60 * 1000;
-    return Math.floor(now / ms) * ms / 1000;
-  } else if (intervalStr.endsWith("w")) {
-    const weeks = parseInt(intervalStr);
-    const ms = weeks * 7 * 24 * 60 * 60 * 1000;
-    return Math.floor(now / ms) * ms / 1000;
-  } else if (intervalStr.endsWith("M")) {
+  const floorMs = (ms: number) => Math.floor(now / ms) * ms / 1000;
+  if (intervalStr.endsWith("s")) return floorMs(parseInt(intervalStr) * 1000);
+  if (intervalStr.endsWith("m")) return floorMs(parseInt(intervalStr) * 60 * 1000);
+  if (intervalStr.endsWith("h")) return floorMs(parseInt(intervalStr) * 3600 * 1000);
+  if (intervalStr.endsWith("d")) return floorMs(parseInt(intervalStr) * 86400 * 1000);
+  if (intervalStr.endsWith("w")) return floorMs(parseInt(intervalStr) * 7 * 86400 * 1000);
+  if (intervalStr.endsWith("M")) {
     const d = new Date();
     d.setUTCHours(0, 0, 0, 0);
     d.setUTCDate(1);
@@ -36,31 +139,103 @@ const getIntervalStartTimestamp = (intervalStr: string): number => {
   return Math.floor(now / 1000);
 };
 
-const getSymbolBase = (sym: string) => {
-  return sym.replace("USDT", "");
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// Binance API — fetch ALL historical klines dengan paginasi
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Coin Icon Component with dynamic fallback
-const CoinIcon = ({ base, className = "h-6 w-6" }: { base: string; className?: string }) => {
+/**
+ * Ambil SEMUA candle dari Binance mulai sejak awal listing coin
+ * hingga sekarang, menggunakan loop paginasi 1000 candle per request.
+ *
+ * Binance membatasi 1000 candle per request, jadi kita loop mundur
+ * menggunakan `endTime` sampai tidak ada data lagi.
+ */
+async function fetchAllKlines(
+  symbol: string,
+  interval: string,
+  onProgress?: (count: number) => void
+): Promise<KlineData[]> {
+  const BASE = "https://api.binance.com/api/v3/klines";
+  const LIMIT = 1000;
+  const all: KlineData[] = [];
+
+  let endTime: number | null = null; // null = mulai dari sekarang
+
+  // Batas pengaman: maksimal 200 batch (= 200.000 candle)
+  // untuk hindari infinite loop pada interval kecil (1s, 1m)
+  const MAX_BATCHES = 200;
+  let batchCount = 0;
+
+  while (batchCount < MAX_BATCHES) {
+    let url = `${BASE}?symbol=${symbol}&interval=${interval}&limit=${LIMIT}`;
+    if (endTime !== null) url += `&endTime=${endTime}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
+
+    const raw: any[][] = await res.json();
+    if (!raw || raw.length === 0) break;
+
+    // Binance mengembalikan [openTime, open, high, low, close, ...]
+    const batch: KlineData[] = raw.map((k) => ({
+      time: Math.floor(Number(k[0]) / 1000) as any,
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4]),
+    }));
+
+    // Sisipkan di depan (data lama di awal)
+    all.unshift(...batch);
+    onProgress?.(all.length);
+
+    // Jika dapat < LIMIT, berarti sudah sampai data paling awal
+    if (raw.length < LIMIT) break;
+
+    // Geser endTime ke openTime candle pertama di batch ini - 1ms
+    endTime = Number(raw[0][0]) - 1;
+    batchCount++;
+  }
+
+  // Deduplikasi dan sort ascending berdasarkan time
+  const seen = new Set<number>();
+  const unique = all.filter((k) => {
+    const t = Number(k.time);
+    if (seen.has(t)) return false;
+    seen.add(t);
+    return true;
+  });
+  unique.sort((a, b) => Number(a.time) - Number(b.time));
+
+  return unique;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CoinIcon
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CoinIcon = ({
+  base,
+  className = "h-6 w-6",
+}: {
+  base: string;
+  className?: string;
+}) => {
   const [err, setErr] = useState(false);
-
-  useEffect(() => {
-    // Reset error on coin change
-    setErr(false);
-  }, [base]);
+  useEffect(() => setErr(false), [base]);
 
   if (err || !base) {
     return (
-      <div className={`flex items-center justify-center rounded-full bg-secondary font-extrabold text-[10px] text-muted-foreground border border-border uppercase shrink-0 ${className}`}>
+      <div
+        className={`flex items-center justify-center rounded-full bg-secondary font-extrabold text-[10px] text-muted-foreground border border-border uppercase shrink-0 ${className}`}
+      >
         {base ? base.slice(0, 2) : "?"}
       </div>
     );
   }
-
-  const iconUrl = `https://assets.coincap.io/assets/icons/${base.toLowerCase()}@2x.png`;
   return (
     <img
-      src={iconUrl}
+      src={`https://assets.coincap.io/assets/icons/${base.toLowerCase()}@2x.png`}
       onError={() => setErr(true)}
       alt={base}
       className={`rounded-full object-cover border border-border/30 shrink-0 bg-secondary ${className}`}
@@ -68,84 +243,158 @@ const CoinIcon = ({ base, className = "h-6 w-6" }: { base: string; className?: s
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TimeframeDropdown
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TimeframeDropdown = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[88px] justify-between"
+      >
+        <span className="text-brand-green">{selected?.label ?? value}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.14 }}
+            className="absolute left-0 mt-1.5 w-64 rounded-xl border border-border bg-card shadow-xl p-2 z-50"
+          >
+            {TIMEFRAME_GROUPS.map((group) => (
+              <div key={group.group} className="mb-2 last:mb-0">
+                {/* Group header */}
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                  {group.group}
+                </div>
+                {/* Grid of buttons */}
+                <div className="grid grid-cols-4 gap-1">
+                  {group.items.map((item) => {
+                    const isActive = item.value === value;
+                    return (
+                      <button
+                        key={item.value}
+                        onClick={() => {
+                          onChange(item.value);
+                          setOpen(false);
+                        }}
+                        className={`rounded-md py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
+                            ? "bg-brand-green text-white shadow-sm shadow-brand-green/30"
+                            : "text-foreground hover:bg-secondary"
+                          }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CryptoPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function CryptoPanel() {
   const { subscriptionTier, setSubscriptionTier, theme } = useThemeAuth();
   const isPremium = subscriptionTier === "premium";
 
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [interval, setIntervalState] = useState("1d");
-  const [currentPrice, setCurrentPrice] = useState(68000.00);
-  const [priceChange, setPriceChange] = useState(0.00);
+  const [currentPrice, setCurrentPrice] = useState(68000.0);
+  const [priceChange, setPriceChange] = useState(0.0);
   const [chartData, setChartData] = useState<KlineData[]>([]);
 
-  // Dynamic coin select states
   const [availablePairs, setAvailablePairs] = useState<string[]>([]);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Loading & Error boundary states
   const [isLoadingChart, setIsLoadingChart] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const priceRef = useRef(currentPrice);
   priceRef.current = currentPrice;
-
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
   const lastBarRef = useRef<KlineData | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Helper to format prices dynamically
-  const formatPrice = (price: number) => {
-    if (price < 0.01) {
-      return price.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 });
-    }
-    return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
+  // ── Format helpers ──────────────────────────────────────────────────────────
 
-  const formatVolume = (vol: number) => {
-    if (vol >= 1000) {
-      return vol.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    }
-    return vol.toFixed(4);
-  };
+  const formatPrice = (price: number) =>
+    price < 0.01
+      ? price.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 })
+      : price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Close dropdown on click outside
+  // ── Close coin dropdown on outside click ────────────────────────────────────
+
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    const h = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
         setIsSelectOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Fetch all active pairs on mount
+  // ── Fetch available pairs on mount ───────────────────────────────────────────
+
   useEffect(() => {
-    async function loadPairs() {
-      try {
-        const pairs = await fetchActiveCryptoPairs();
-        setAvailablePairs(pairs);
-      } catch (e) {
-        console.error("Gagal memuat daftar koin dari Binance:", e);
-        setAvailablePairs(["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT", "PEPEUSDT"]);
-      }
-    }
-    loadPairs();
+    fetchActiveCryptoPairs()
+      .then(setAvailablePairs)
+      .catch(() =>
+        setAvailablePairs([
+          "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+          "ADAUSDT", "XRPUSDT", "PEPEUSDT",
+        ])
+      );
   }, []);
 
-  // Helper to update the last bar with a new price tick
-  const updateCandle = (price: number) => {
-    if (!candlestickSeriesRef.current || !lastBarRef.current) return;
+  // ── Update last candle with latest price tick ────────────────────────────────
 
+  const updateCandle = useCallback((price: number) => {
+    if (!candlestickSeriesRef.current || !lastBarRef.current) return;
     const barTime = getIntervalStartTimestamp(interval);
     let updatedBar: KlineData;
 
-    if (barTime === lastBarRef.current.time) {
+    if (barTime === Number(lastBarRef.current.time)) {
       updatedBar = {
-        time: lastBarRef.current.time, // Mempertahankan format waktu aslinya
+        time: lastBarRef.current.time,
         open: lastBarRef.current.open,
         high: Math.max(lastBarRef.current.high, price),
         low: Math.min(lastBarRef.current.low, price),
@@ -153,146 +402,114 @@ export default function CryptoPanel() {
       };
     } else {
       if (barTime < Number(lastBarRef.current.time)) return;
-
-      updatedBar = {
-        time: barTime,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-      };
+      updatedBar = { time: barTime, open: price, high: price, low: price, close: price };
     }
 
     try {
       candlestickSeriesRef.current.update(updatedBar);
       lastBarRef.current = updatedBar;
-    } catch (error) {
-      console.warn("Sinkronisasi chart tertunda (menunggu data interval baru).");
+    } catch {
+      /* sinkronisasi tertunda */
     }
-  };
+  }, [interval]);
 
-  // 1. Initial load of historical klines & current price via REST API
+  // ── 1. Load ALL historical klines via paginated Binance API ─────────────────
+
   useEffect(() => {
     let active = true;
+
     async function loadData() {
+      setIsLoadingChart(true);
+      setLoadingProgress(0);
+      setErrorBanner(null);
+
       try {
-        setIsLoadingChart(true);
-        setErrorBanner(null);
+        // Fetch harga saat ini secara paralel
         const [price, klines] = await Promise.all([
           fetchCryptoPrice(symbol),
-          fetchCryptoKlines(symbol, interval, 400) // fetch dynamic historical klines
+          fetchAllKlines(symbol, interval, (count) => {
+            if (active) setLoadingProgress(count);
+          }),
         ]);
 
         if (!active) return;
         setCurrentPrice(price);
         setChartData(klines);
-        if (klines.length > 0) {
-          lastBarRef.current = klines[klines.length - 1];
-        }
-      } catch (err: any) {
-        console.error("Error loading data from Binance:", err);
-        if (active) {
-          setErrorBanner("Gagal mengambil data pasar dari Binance. Menggunakan mode simulasi...");
-          // Fallback static data to avoid empty screen
-          const fakeTime = Math.floor(Date.now() / 1000);
-          const fakeKlines: KlineData[] = [];
-          let currentPriceFallback = 68000.00;
-          if (symbol.includes("ETH")) currentPriceFallback = 3500.00;
-          if (symbol.includes("SOL")) currentPriceFallback = 150.00;
-          if (symbol.includes("PEPE")) currentPriceFallback = 0.000012;
+        if (klines.length > 0) lastBarRef.current = klines[klines.length - 1];
 
-          for (let i = 100; i >= 0; i--) {
-            fakeKlines.push({
-              time: fakeTime - i * 86400,
-              open: currentPriceFallback * (1 + (Math.random() - 0.5) * 0.05),
-              high: currentPriceFallback * (1 + Math.random() * 0.05),
-              low: currentPriceFallback * (1 - Math.random() * 0.05),
-              close: currentPriceFallback,
-            });
-          }
-          setChartData(fakeKlines);
-          lastBarRef.current = fakeKlines[fakeKlines.length - 1];
-        }
+      } catch (err) {
+        if (!active) return;
+        console.error("Error loading data from Binance:", err);
+        setErrorBanner("Gagal mengambil data Binance. Menggunakan mode simulasi...");
+
+        // Fallback data
+        const fakeTime = Math.floor(Date.now() / 1000);
+        let base = 68000.0;
+        if (symbol.includes("ETH")) base = 3500.0;
+        if (symbol.includes("SOL")) base = 150.0;
+        if (symbol.includes("PEPE")) base = 0.000012;
+
+        const fakeKlines: KlineData[] = Array.from({ length: 300 }, (_, i) => ({
+          time: fakeTime - (299 - i) * 86400,
+          open: base * (1 + (Math.random() - 0.5) * 0.05),
+          high: base * (1 + Math.random() * 0.05),
+          low: base * (1 - Math.random() * 0.05),
+          close: base,
+        }));
+        setChartData(fakeKlines);
+        lastBarRef.current = fakeKlines[fakeKlines.length - 1];
       } finally {
         if (active) {
           setIsLoadingChart(false);
+          setLoadingProgress(0);
         }
       }
     }
-    loadData();
 
-    return () => {
-      active = false;
-    };
+    loadData();
+    return () => { active = false; };
   }, [symbol, interval]);
 
-  // 2. Setup/Destroy Lightweight Chart and sync options with Theme Changes
+  // ── 2. Setup / update Lightweight Chart sesuai tema ─────────────────────────
+
   useEffect(() => {
     const container = chartContainerRef.current;
     if (!container) return;
 
-    // Deteksi tema yang sedang aktif
-    const isDark = theme === "dark" || theme === "light"; // Sesuaikan jika menggunakan next-themes
-    const backgroundColor = isDark ? "#111827" : "#ffffff";
-    const textColor = isDark ? "#94a3b8" : "#64748b";
-    const gridColor = isDark ? "#1f2937" : "#f1f5f9";
-    const borderColor = isDark ? "#1f2937" : "#e2e8f0";
+    // FIX: deteksi tema yang benar
+    const isDark = theme === "dark";
+    const { backgroundColor, textColor, gridColor, borderColor } = getThemeColors(isDark);
 
-    // Opsi konfigurasi yang akan dipakai saat render pertama & saat ganti tema
     const chartOptions = {
       layout: {
-        // PERBAIKAN 2: Menggunakan ColorType.Solid agar tidak terjadi error TypeScript
         background: { type: ColorType.Solid, color: backgroundColor },
-        textColor: textColor,
+        textColor,
         fontFamily: "Geist, Inter, sans-serif",
       },
       grid: {
         vertLines: { color: gridColor },
         horzLines: { color: gridColor },
       },
-      rightPriceScale: {
-        borderColor: borderColor,
-      },
+      rightPriceScale: { borderColor },
       timeScale: {
-        borderColor: borderColor,
-        timeVisible: true, // INI KUNCI AGAR JAM MUNCUL
-        secondsVisible: false,
-        tickMarkFormatter: (time: number, tickMarkType: any, locale: string) => {
-          // Memastikan format yang muncul selalu konsisten (Tanggal + Jam)
-          const date = new Date(time * 1000);
-          return date.toLocaleString('id-ID', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-        },
+        borderColor,
+        timeVisible: true,
+        secondsVisible: interval === "1s",
+        // Tidak menggunakan tickMarkFormatter — library sudah handle dengan benar.
+        // Candle 1D di 00:00 UTC adalah BENAR sesuai standar Binance & TradingView.
       },
       localization: {
-        locale: 'id-ID', // Format bahasa Indonesia (HH:MM)
-        timeFormatter: (businessDayOrTimestamp: number) => {
-          return new Date(businessDayOrTimestamp * 1000).toLocaleString('id-ID', {
-            day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-          });
-        }
-      }
+        // FIX: gunakan UTC methods untuk hindari offset WIB
+        timeFormatter: (ts: number) => formatTimestampUTC(ts),
+      },
     };
 
     if (!chartRef.current) {
-      // JIKA CHART BELUM ADA: Buat dari awal
       const width = container.clientWidth;
-      if (width <= 0) {
-        setTimeout(() => { }, 100);
-        return;
-      }
+      if (width <= 0) return;
 
-      const chart = createChart(container, {
-        width,
-        height: 320,
-        ...chartOptions, // Masukkan opsi ke sini
-      });
-
-      const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      const chart = createChart(container, { width, height: 320, ...chartOptions });
+      const series = chart.addSeries(CandlestickSeries, {
         upColor: "#10b981",
         downColor: "#ef4444",
         borderVisible: false,
@@ -301,37 +518,37 @@ export default function CryptoPanel() {
       });
 
       chartRef.current = chart;
-      candlestickSeriesRef.current = candlestickSeries;
+      candlestickSeriesRef.current = series;
 
       const handleResize = () => {
-        if (chartRef.current && container) {
-          chartRef.current.resize(container.clientWidth, 320);
-        }
+        chartRef.current?.resize(container.clientWidth, 320);
       };
       window.addEventListener("resize", handleResize);
-      (chartRef.current as any).handleResize = handleResize;
+      (chartRef.current as any).__handleResize = handleResize;
 
     } else {
-      // JIKA CHART SUDAH ADA & HANYA GANTI TEMA: Terapkan opsi baru tanpa me-reset data
+      // Chart sudah ada → hanya update opsi (warna tema, secondsVisible, dll)
       chartRef.current.applyOptions(chartOptions);
     }
-  }, [theme, symbol, interval]); // Dependency ini yang memastikan fungsi dipanggil ulang tiap kali toggle di-klik
+  }, [theme, symbol, interval]);
 
-  // 3. Set Chart data when it loads
+  // ── 3. Set chart data setelah klines dimuat ──────────────────────────────────
+
   useEffect(() => {
     if (candlestickSeriesRef.current && chartData.length > 0) {
       candlestickSeriesRef.current.setData(chartData);
+      // Scroll ke candle terbaru
+      chartRef.current?.timeScale().scrollToRealTime();
     }
   }, [chartData]);
 
-  // Cleanup chart on component unmount
+  // ── Cleanup saat unmount ─────────────────────────────────────────────────────
+
   useEffect(() => {
     return () => {
       if (chartRef.current) {
-        const handleResize = (chartRef.current as any).handleResize;
-        if (handleResize) {
-          window.removeEventListener("resize", handleResize);
-        }
+        const h = (chartRef.current as any).__handleResize;
+        if (h) window.removeEventListener("resize", h);
         chartRef.current.remove();
         chartRef.current = null;
         candlestickSeriesRef.current = null;
@@ -339,28 +556,28 @@ export default function CryptoPanel() {
     };
   }, []);
 
-  // 4. Real-time stream via WebSockets (Gated for Premium tier, with REST polling fallback)
+  // ── 4. Real-time WebSocket (Premium only) ────────────────────────────────────
+
   useEffect(() => {
     if (!isPremium || isLoadingChart) return;
 
     let ws: WebSocket | null = null;
-    let fallbackInterval: NodeJS.Timeout | null = null;
-    let receivedWsMessage = false;
+    let fallback: NodeJS.Timeout | null = null;
+    let gotWs = false;
 
-    const startFallbackPolling = () => {
-      if (fallbackInterval) return;
-      console.warn(`Binance WebSocket stream unavailable for ${symbol}. Activating REST polling fallback...`);
-      fallbackInterval = setInterval(async () => {
+    const startFallback = () => {
+      if (fallback) return;
+      fallback = setInterval(async () => {
         try {
-          const price = await fetchCryptoPrice(symbol);
-          setCurrentPrice(price);
-          updateCandle(price);
-        } catch (err) {
-          // Double fallback: apply minor drift if REST fails
-          const drift = (Math.random() - 0.5) * (priceRef.current * 0.0005);
-          const nextPrice = parseFloat((priceRef.current + drift).toFixed(symbol.includes("PEPE") ? 8 : 2));
-          setCurrentPrice(nextPrice);
-          updateCandle(nextPrice);
+          const p = await fetchCryptoPrice(symbol);
+          setCurrentPrice(p);
+          updateCandle(p);
+        } catch {
+          const drift = (Math.random() - 0.5) * priceRef.current * 0.0005;
+          const dec = symbol.includes("PEPE") ? 8 : 2;
+          const p = parseFloat((priceRef.current + drift).toFixed(dec));
+          setCurrentPrice(p);
+          updateCandle(p);
         }
       }, 3000);
     };
@@ -369,49 +586,41 @@ export default function CryptoPanel() {
       ws = connectCryptoWebSocket(
         symbol,
         ({ price, changePercent }) => {
-          receivedWsMessage = true;
+          gotWs = true;
           setCurrentPrice(price);
           setPriceChange(changePercent);
           updateCandle(price);
         },
-        () => {
-          startFallbackPolling();
-        }
+        startFallback
       );
+      ws.onclose = startFallback;
 
-      ws.onclose = () => {
-        startFallbackPolling();
-      };
-
-      const timer = setTimeout(() => {
-        if (!receivedWsMessage) {
-          startFallbackPolling();
-        }
-      }, 4000);
-
+      const timer = setTimeout(() => { if (!gotWs) startFallback(); }, 4000);
       return () => {
         clearTimeout(timer);
-        if (ws) ws.close();
-        if (fallbackInterval) clearInterval(fallbackInterval);
+        ws?.close();
+        if (fallback) clearInterval(fallback);
       };
-    } catch (err) {
-      startFallbackPolling();
-      return () => {
-        if (fallbackInterval) clearInterval(fallbackInterval);
-      };
+    } catch {
+      startFallback();
+      return () => { if (fallback) clearInterval(fallback); };
     }
-  }, [isPremium, symbol, interval, isLoadingChart]);
+  }, [isPremium, symbol, interval, isLoadingChart, updateCandle]);
 
-  // Removed old demo exchange functions
+  // ── Filtered pairs ───────────────────────────────────────────────────────────
 
-  const filteredPairs = availablePairs.filter(p =>
+  const filteredPairs = availablePairs.filter((p) =>
     p.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
 
-      {/* Dynamic Error Boundary Alert Banner */}
+      {/* Error Banner */}
       {errorBanner && (
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-amber-500 text-xs">
           <AlertCircle className="h-5 w-5 shrink-0" />
@@ -419,16 +628,22 @@ export default function CryptoPanel() {
         </div>
       )}
 
-      {/* Header Info */}
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-4">
           <CoinIcon base={getSymbolBase(symbol)} className="h-12 w-12" />
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-foreground">{getSymbolBase(symbol)} / USDT</h2>
-              <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">Crypto</span>
+              <h2 className="text-xl font-bold text-foreground">
+                {getSymbolBase(symbol)} / USDT
+              </h2>
+              <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                Crypto
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground">Binance REST + Live WebSocket Stream</p>
+            <p className="text-xs text-muted-foreground">
+              Binance REST + Live WebSocket Stream
+            </p>
           </div>
         </div>
 
@@ -441,32 +656,40 @@ export default function CryptoPanel() {
           </div>
           <div>
             <div className="text-sm font-semibold text-muted-foreground">Perubahan 24j</div>
-            <div className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-emerald-500" : "text-destructive"}`}>
-              {priceChange >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+            <div
+              className={`flex items-center gap-0.5 text-sm font-extrabold justify-end ${priceChange >= 0 ? "text-emerald-500" : "text-destructive"
+                }`}
+            >
+              {priceChange >= 0
+                ? <ArrowUpRight className="h-4 w-4" />
+                : <ArrowDownRight className="h-4 w-4" />}
               <span>{priceChange >= 0 ? "+" : ""}{priceChange.toFixed(2)}%</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Chart Card */}
+      {/* Chart Card */}
       <div className="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
 
-        {/* Dynamic Controls Bar with custom shadcn-like Select Dropdown */}
+        {/* Controls Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4 mb-6 z-40 relative">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
 
-            {/* Custom Popover Select */}
+            {/* Coin Selector */}
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsSelectOpen(!isSelectOpen)}
-                className="flex items-center justify-between gap-3 w-44 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none focus:border-brand-green hover:bg-secondary/40 transition cursor-pointer select-none"
+                className="flex items-center justify-between gap-3 w-44 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none"
               >
                 <div className="flex items-center gap-2">
                   <CoinIcon base={getSymbolBase(symbol)} className="h-5 w-5" />
                   <span>{getSymbolBase(symbol)}/USDT</span>
                 </div>
-                <ChevronDown className={`h-4 w-4 text-muted-foreground transition duration-200 ${isSelectOpen ? "rotate-180" : ""}`} />
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition duration-200 ${isSelectOpen ? "rotate-180" : ""
+                    }`}
+                />
               </button>
 
               <AnimatePresence>
@@ -478,7 +701,6 @@ export default function CryptoPanel() {
                     transition={{ duration: 0.15 }}
                     className="absolute left-0 mt-1.5 w-60 rounded-xl border border-border bg-card shadow-lg p-2.5 z-50 space-y-2 max-h-80 overflow-hidden flex flex-col"
                   >
-                    {/* Search Field */}
                     <div className="relative flex items-center shrink-0">
                       <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
                       <input
@@ -489,8 +711,6 @@ export default function CryptoPanel() {
                         className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
                       />
                     </div>
-
-                    {/* Scrollable list */}
                     <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 scrollbar-thin">
                       {filteredPairs.length > 0 ? (
                         filteredPairs.map((pair) => {
@@ -505,15 +725,17 @@ export default function CryptoPanel() {
                                 setSearchQuery("");
                               }}
                               className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
-                                ? "bg-brand-green/10 text-brand-green font-bold"
-                                : "text-foreground hover:bg-secondary"
+                                  ? "bg-brand-green/10 text-brand-green font-bold"
+                                  : "text-foreground hover:bg-secondary"
                                 }`}
                             >
                               <div className="flex items-center gap-2">
-                                <CoinIcon base={base} className="h-4.5 w-4.5" />
+                                <CoinIcon base={base} className="h-4 w-4" />
                                 <span>{base} / USDT</span>
                               </div>
-                              {isSelected && <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />}
+                              {isSelected && (
+                                <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
+                              )}
                             </button>
                           );
                         })
@@ -528,6 +750,13 @@ export default function CryptoPanel() {
               </AnimatePresence>
             </div>
 
+            {/* Timeframe Dropdown */}
+            <TimeframeDropdown
+              value={interval}
+              onChange={(v) => setIntervalState(v)}
+            />
+
+            {/* Live / Delayed badge */}
             {isPremium ? (
               <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full select-none">
                 <Zap className="h-3 w-3 fill-current animate-pulse" /> LIVE STREAMING
@@ -539,39 +768,29 @@ export default function CryptoPanel() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-1 text-xs font-semibold">
-            {[
-              { label: "15m", value: "15m" },
-              { label: "1H", value: "1h" },
-              { label: "4H", value: "4h" },
-              { label: "1D", value: "1d" },
-              { label: "1W", value: "1w" },
-              { label: "1M", value: "1M" },
-            ].map((t) => (
-              <button
-                key={t.value}
-                onClick={() => setIntervalState(t.value)}
-                className={`px-3 py-1 rounded-md transition cursor-pointer select-none ${interval === t.value
-                  ? "bg-brand-green text-white font-bold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {/* Candle count info */}
+          {!isLoadingChart && chartData.length > 0 && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground select-none">
+              <History className="h-3 w-3" />
+              <span>{chartData.length.toLocaleString("id-ID")} candle</span>
+            </div>
+          )}
         </div>
 
         {/* Chart Container */}
         <div className="h-80 w-full relative z-10">
 
-          {/* FREE TIER OVERLAY BANNER */}
+          {/* Free Tier Overlay */}
           {!isPremium && (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-card/75 backdrop-blur-xs p-6 text-center select-none animate-in fade-in duration-200">
               <ShieldAlert className="h-10 w-10 text-amber-500 mb-3" />
-              <h4 className="text-md font-bold text-foreground">Grafik Real-Time Terkunci</h4>
+              <h4 className="text-md font-bold text-foreground">
+                Grafik Real-Time Terkunci
+              </h4>
               <p className="mt-1.5 text-xs text-muted-foreground max-w-sm leading-relaxed">
-                Anda menggunakan akun **Free**. Tingkatkan ke **Premium** untuk membuka grafik kripto real-time WebSocket dan signal WhatsApp.
+                Anda menggunakan akun <strong>Free</strong>. Tingkatkan ke{" "}
+                <strong>Premium</strong> untuk membuka grafik kripto real-time
+                WebSocket dan signal WhatsApp.
               </p>
               <button
                 onClick={() => setSubscriptionTier("premium")}
@@ -582,12 +801,24 @@ export default function CryptoPanel() {
             </div>
           )}
 
+          {/* Loading Overlay */}
           {isLoadingChart && (
-            <div className="absolute inset-0 flex items-center justify-center z-20 bg-card">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20 bg-card rounded-xl">
               <Loader2 className="h-8 w-8 animate-spin text-brand-green" />
+              {loadingProgress > 0 && (
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-xs text-muted-foreground">
+                    Memuat data historis...
+                  </p>
+                  <p className="text-xs font-bold text-brand-green">
+                    {loadingProgress.toLocaleString("id-ID")} candle
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
+          {/* Chart Canvas */}
           <div
             ref={chartContainerRef}
             className={`w-full h-80 ${isLoadingChart ? "invisible" : ""}`}
@@ -595,10 +826,17 @@ export default function CryptoPanel() {
         </div>
       </div>
 
-      {/* Portfolio Tracker & WhatsApp Alert Configuration */}
+      {/* Portfolio Tracker & Signal Configurator */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <PortfolioTracker currentPrice={currentPrice} activeSymbol={symbol} isStock={false} />
-        <SignalConfigurator activeSymbol={symbol} currentPrice={currentPrice} />
+        <PortfolioTracker
+          currentPrice={currentPrice}
+          activeSymbol={symbol}
+          isStock={false}
+        />
+        <SignalConfigurator
+          activeSymbol={symbol}
+          currentPrice={currentPrice}
+        />
       </div>
 
     </div>

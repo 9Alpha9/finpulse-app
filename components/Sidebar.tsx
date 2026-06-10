@@ -51,9 +51,9 @@ export default function Sidebar({ isOpen, onClose, activeTab, setActiveTab }: Si
         <div className="flex h-16 items-center justify-between px-6 border-b border-border">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green font-bold text-white shadow-md shadow-brand-green/20">
-              A
+              F
             </div>
-            <span className="text-xl font-bold tracking-tight text-foreground">ArthaVerse</span>
+            <span className="text-xl font-bold tracking-tight text-foreground">Finpulse</span>
           </div>
 
           {/* Close button for mobile */}
