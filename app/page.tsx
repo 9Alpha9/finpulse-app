@@ -20,6 +20,7 @@ import SignalsPanel from "@/components/SignalsPanel";
 import NewsPanel from "@/components/NewsPanel";
 import TechnicalsGauge, { KlineBasic } from "@/components/TechnicalsGauge";
 import PortfolioWatchlistPanel from "@/components/PortfolioWatchlistPanel";
+import GoldPanel from "@/components/GoldPanel";
 
 import {
   ChevronRight,
@@ -255,6 +256,13 @@ export default function DashboardPage() {
         return (
           <motion.div key="stocks" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
             <StocksPanel />
+          </motion.div>
+        );
+
+      case "gold":
+        return (
+          <motion.div key="gold" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
+            <GoldPanel />
           </motion.div>
         );
 
