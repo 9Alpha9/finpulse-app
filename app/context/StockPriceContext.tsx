@@ -93,6 +93,22 @@ export function StockPriceProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const tickId = setInterval(() => {
       setQuotes(prev => {
+        // Cek apakah market IDX buka (Senin-Jumat, 09:00 - 16:00 WIB)
+        const now = new Date();
+        const jktTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+        const jktDay = jktTime.getUTCDay();
+        const jktHour = jktTime.getUTCHours();
+        const jktMin = jktTime.getUTCMinutes();
+        const isWeekend = jktDay === 0 || jktDay === 6;
+        const timeInMins = jktHour * 60 + jktMin;
+        const isOpen = !isWeekend && (timeInMins >= 540 && timeInMins <= 960);
+
+        if (!isOpen) {
+          // Jika market tutup, jangan lakukan simulasi micro-tick.
+          // Kembalikan ke harga asli dari API.
+          return { ...prev, ...realRef.current };
+        }
+
         const next = { ...prev };
 
         for (const sym of TICKERS) {

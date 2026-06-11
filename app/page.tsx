@@ -24,6 +24,7 @@ import EconomicCalendar from "@/components/EconomicCalendar";
 import BottomNav from "@/components/BottomNav";
 import ProfilePanel from "@/components/ProfilePanel";
 import MarketMarquee from "@/components/MarketMarquee";
+import ForexPanel from "@/components/ForexPanel";
 
 import {
   ChevronRight,
@@ -260,6 +261,7 @@ export default function DashboardPage() {
 
             {/* RIGHT COLUMN */}
             <div className="space-y-6 flex flex-col lg:max-h-full">
+              <ForexPanel />
               <div className="bg-card rounded-2xl border border-border p-4 shadow-sm h-[550px] flex flex-col overflow-hidden">
                 <NewsPanel />
               </div>

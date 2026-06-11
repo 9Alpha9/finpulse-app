@@ -132,7 +132,9 @@ export function fetchStockKlinesMock(symbol: string, interval: string, limit = 2
 }
 
 export function getYahooTicker(symbol: string): string {
-  return (symbol === "IHSG" || symbol === "^JKSE") ? "^JKSE" : (symbol.endsWith(".JK") ? symbol : `${symbol}.JK`);
+  if (symbol === "IHSG" || symbol === "^JKSE") return "^JKSE";
+  if (symbol.includes("=X")) return symbol;
+  return symbol.endsWith(".JK") ? symbol : `${symbol}.JK`;
 }
 
 export async function fetchStockPriceFromYahoo(symbol: string): Promise<number> {

@@ -394,6 +394,7 @@ export default function CryptoPanel({ onOpenChange, hideMarquee }: { onOpenChang
   const dropdownRef = useRef<HTMLDivElement>(null);
   const klineCache = useRef<Map<string, KlineData[]>>(new Map());
   const resizeHandlerRef = useRef<(() => void) | null>(null);
+  const scrollListenerRef = useRef<any>(null);
 
   // Menyimpan arah tick transaksi *terakhir*.
   const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
@@ -509,37 +510,63 @@ export default function CryptoPanel({ onOpenChange, hideMarquee }: { onOpenChang
           return;
         }
 
-        setLoadingMore(true);
-        const LIMIT = 1000;
-        const MAX_EXTRA = 50;
-        let all = [...firstBatch];
-        let endTime = firstBatch[0].time * 1000 - 1;
-        let batchCount = 0;
-
-        while (active && batchCount < MAX_EXTRA) {
-          const older = await fetchCryptoKlines(symbol, interval, LIMIT, endTime);
-          if (!older || older.length === 0) break;
-
-          const combined = [...older, ...all];
-          const seen = new Set<number>();
-          const merged = combined.filter((k) => {
-            if (seen.has(k.time)) return false;
-            seen.add(k.time);
-            return true;
-          });
-          merged.sort((a, b) => a.time - b.time);
-          all = merged;
-
-          applyToChart(all);
-
-          if (older.length < LIMIT) break;
-          endTime = older[0].time * 1000 - 1;
-          batchCount++;
+        // Clean up previous listener
+        if (chartRef.current && scrollListenerRef.current) {
+          chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(scrollListenerRef.current);
         }
 
-        if (active) {
-          klineCache.current.set(cacheKey, all);
-          setLoadingMore(false);
+        let all = [...firstBatch];
+        let currentEndTime = firstBatch[0].time * 1000 - 1;
+        let isFetching = false;
+        let hasMore = true;
+        
+        setLoadingMore(false);
+        klineCache.current.set(cacheKey, all);
+
+        const handleScroll = async (logicalRange: any) => {
+          if (!active || !logicalRange || !hasMore || isFetching) return;
+
+          // Jika user menggeser chart ke kiri mendekati awal data (< 50 candle tersisa di layar kiri)
+          if (logicalRange.left < 50) {
+            isFetching = true;
+            setLoadingMore(true);
+
+            try {
+              const LIMIT = 1000;
+              const older = await fetchCryptoKlines(symbol, interval, LIMIT, currentEndTime);
+              if (!older || older.length === 0) {
+                hasMore = false;
+              } else {
+                const combined = [...older, ...all];
+                const seen = new Set<number>();
+                const merged = combined.filter((k) => {
+                  if (seen.has(k.time)) return false;
+                  seen.add(k.time);
+                  return true;
+                });
+                merged.sort((a, b) => a.time - b.time);
+                all = merged;
+
+                if (active) {
+                  applyToChart(all);
+                  klineCache.current.set(cacheKey, all);
+                }
+
+                if (older.length < LIMIT) hasMore = false;
+                currentEndTime = older[0].time * 1000 - 1;
+              }
+            } catch (err) {
+              console.error("[Lazy Load] Error:", err);
+            } finally {
+              isFetching = false;
+              if (active) setLoadingMore(false);
+            }
+          }
+        };
+
+        if (chartRef.current) {
+          scrollListenerRef.current = handleScroll;
+          chartRef.current.timeScale().subscribeVisibleLogicalRangeChange(handleScroll);
         }
 
       } catch (err) {
@@ -574,7 +601,13 @@ export default function CryptoPanel({ onOpenChange, hideMarquee }: { onOpenChang
     }
 
     loadData();
-    return () => { active = false; };
+    return () => { 
+      active = false; 
+      if (chartRef.current && scrollListenerRef.current) {
+        chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(scrollListenerRef.current);
+        scrollListenerRef.current = null;
+      }
+    };
   }, [symbol, interval]);
 
   // ── 2. Setup / update Lightweight Chart sesuai tema ─────────────────────────
