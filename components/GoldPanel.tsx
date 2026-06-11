@@ -132,17 +132,18 @@ async function fetchGoldQuote(symbol: string): Promise<GoldQuote | null> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 const GOLD_LOGOS: Record<string, string> = {
-  "GLD": "https://logo.clearbit.com/ssga.com",
-  "IAU": "https://logo.clearbit.com/ishares.com",
-  "SGOL": "https://logo.clearbit.com/abrdn.com",
-  "GLDM": "https://logo.clearbit.com/ssga.com",
-  "GDX": "https://logo.clearbit.com/vaneck.com",
-  "GDXJ": "https://logo.clearbit.com/vaneck.com",
-  "GOLD": "https://logo.clearbit.com/barrick.com",
-  "NEM": "https://logo.clearbit.com/newmont.com",
-  "AEM": "https://logo.clearbit.com/agnicoeagle.com",
-  "ANTM.JK": "https://logo.clearbit.com/antam.com",
-  "MDKA.JK": "https://logo.clearbit.com/merdekacoppergold.com",
+  "GC=F": "/img/goldGlobal/GC.png",
+  "GLD": "/img/goldGlobal/GLD.png",
+  "IAU": "/img/goldGlobal/IAU.png",
+  "SGOL": "/img/goldGlobal/SGOL.png",
+  "GLDM": "/img/goldGlobal/GLDM.png",
+  "GDX": "/img/goldGlobal/GDX.png",
+  "GDXJ": "/img/goldGlobal/GDJX.png",
+  "GOLD": "/img/goldGlobal/BGC.png",
+  "NEM": "/img/goldGlobal/NEM.png",
+  "AEM": "/img/goldGlobal/AEM.png",
+  "ANTM.JK": "/img/goldGlobal/ANTM.png",
+  "MDKA.JK": "/img/goldGlobal/MDKA.png",
 };
 
 function GoldIcon({ symbol, size = 40 }: { symbol: string; size?: number }) {
@@ -166,7 +167,7 @@ function GoldIcon({ symbol, size = 40 }: { symbol: string; size?: number }) {
       src={logoUrl}
       onError={() => setErr(true)}
       alt={symbol}
-      className="rounded-xl object-contain bg-white p-1 border border-border shrink-0"
+      className="rounded-full object-cover shrink-0"
       style={{ width: size, height: size }}
     />
   );
@@ -570,9 +571,9 @@ export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: bool
       window.addEventListener("resize", handleResize);
 
       // 3. Sembunyikan Logo TradingView Watermark (Inject CSS)
-      const style = document.createElement("style");
-      style.innerHTML = `#tv-attr-logo { display: none !important; }`;
-      document.head.appendChild(style);
+      // const style = document.createElement("style");
+      // style.innerHTML = `#tv-attr-logo { display: none !important; }`;
+      // document.head.appendChild(style);
 
     } else {
       chartRef.current.applyOptions(chartOptions);
