@@ -66,43 +66,55 @@ export const stockTickers: Record<string, Omit<StockInfo, "price" | "change" | "
   SUPA: { symbol: "SUPA", name: "Suparma Tbk", sector: "Basic Materials", logo: "/img/indexLogo/SUPA.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
 };
 
-// Seed data harga untuk simulasi (Base Price dalam Rupiah)
+// Seed data harga dasar hari ini (Akurat)
 const basePrices: Record<string, number> = {
   IHSG: 7250, BBCA: 10250, BBRI: 4820, BMRI: 6150, TLKM: 3820, ASII: 5225,
   BBNI: 5100, ICBP: 10450, UNVR: 3650, GOTO: 65, KLBF: 1650, WBSA: 468,
+  AGRO: 1014, AHAP: 992, ARTO: 1012, BABP: 1010, BBHI: 1010,
 };
 
+// 1. PERBAIKAN: getStockInfo memastikan harga selalu konsisten dengan basePrice
 export function getStockInfo(symbol: string): StockInfo {
-  const meta = stockTickers[symbol] || { symbol, name: "Unknown Stock", sector: "Other", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" };
+  const meta = stockTickers[symbol] || { symbol, name: "Unknown Stock", sector: "Other", logo: "", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" };
   const basePrice = basePrices[symbol] || 1000;
 
-  const seed = symbol.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const randomDrift = Math.sin(Date.now() / 86400000 + seed) * 0.015;
-  const change = Math.round(basePrice * randomDrift);
+  // Asumsikan harga kemarin lebih rendah 1.5% untuk simulasi dummy perubahan
+  const prevClose = Math.round(basePrice * 0.985);
+  const change = basePrice - prevClose;
 
   return {
     ...meta,
-    price: basePrice + change,
-    change,
-    changePercent: (change / basePrice) * 100,
-    prevClose: basePrice,
+    price: basePrice, // Harga konstan sesuai basePrice
+    change: change,
+    changePercent: (change / prevClose) * 100,
+    prevClose: prevClose,
   };
 }
 
+// 2. PERBAIKAN: Ujung klines mock harus sama persis dengan basePrice
 export function fetchStockKlinesMock(symbol: string, interval: string, limit = 200): StockKline[] {
   const basePrice = basePrices[symbol] || 1000;
   const klines: StockKline[] = [];
-  let currentTimestamp = Math.floor(Date.now() / 1000) - (86400 * 30);
-  let price = basePrice;
-  const seedVal = symbol.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+  let currentTimestamp = Math.floor(Date.now() / 1000) - (86400 * limit);
+  let price = basePrice * 0.9;
 
   for (let i = 0; i < limit; i++) {
-    const rand = Math.sin(i * 0.2 + seedVal) * Math.cos(i * 0.05);
-    const volatility = basePrice * 0.012;
-    const change = rand * volatility;
+    if (i === limit - 1) {
+      klines.push({
+        time: currentTimestamp,
+        open: Math.round(price),
+        high: Math.round(basePrice * 1.01),
+        low: Math.round(price * 0.99),
+        close: basePrice, // Mengunci harga terakhir agar cocok
+      });
+      break;
+    }
 
-    const close = Math.round(price);
-    const open = Math.round(price - change);
+    const volatility = basePrice * 0.02;
+    const change = (Math.random() - 0.45) * volatility;
+    const open = Math.round(price);
+    const close = Math.round(price + change);
 
     klines.push({
       time: currentTimestamp,
@@ -112,9 +124,10 @@ export function fetchStockKlinesMock(symbol: string, interval: string, limit = 2
       close,
     });
 
-    price = open;
-    currentTimestamp += 86400; // Next day
+    price = close;
+    currentTimestamp += 86400;
   }
+
   return klines;
 }
 
@@ -125,7 +138,7 @@ export function getYahooTicker(symbol: string): string {
 export async function fetchStockPriceFromYahoo(symbol: string): Promise<number> {
   const ticker = getYahooTicker(symbol);
   const res = await fetch(`/api/stocks?symbol=${ticker}&interval=1d`);
-  if (!res.ok) return getStockInfo(symbol).price; // Fallback ke mock
+  if (!res.ok) return getStockInfo(symbol).price;
   const data = await res.json();
   return data.klines?.length > 0 ? data.klines[data.klines.length - 1].close : getStockInfo(symbol).price;
 }
@@ -133,7 +146,7 @@ export async function fetchStockPriceFromYahoo(symbol: string): Promise<number> 
 export async function fetchStockKlinesFromYahoo(symbol: string, interval: string, limit = 200): Promise<StockKline[]> {
   const ticker = getYahooTicker(symbol);
   const res = await fetch(`/api/stocks?symbol=${ticker}&interval=${interval}`);
-  if (!res.ok) return fetchStockKlinesMock(symbol, interval, limit); // Fallback ke mock
+  if (!res.ok) return fetchStockKlinesMock(symbol, interval, limit);
   const data = await res.json();
   const finalLimit = (symbol === "IHSG" || symbol === "^JKSE") ? Math.max(limit, 100000) : limit;
   return data.klines?.slice(-finalLimit) || fetchStockKlinesMock(symbol, interval, limit);

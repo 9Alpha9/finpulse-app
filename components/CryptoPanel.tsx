@@ -52,7 +52,7 @@ function LiveCryptoPrice({ symbol, basePrice, mainPrice }: { symbol: string; bas
     if (mainPrice !== undefined) return; // Jangan lakukan simulasi jika tersinkronisasi
     if (!basePrice) return;
     setPrice(basePrice);
-    
+
     let active = true;
     const interval = setInterval(() => {
       if (!active) return;
@@ -376,9 +376,9 @@ export default function CryptoPanel({ onOpenChange }: { onOpenChange?: (open: bo
       fetch("/api/crypto/price")
         .then(r => r.json())
         .then(data => {
-           const map: Record<string, number> = {};
-           data.forEach((item: any) => map[item.symbol] = parseFloat(item.price));
-           setAllPrices(map);
+          const map: Record<string, number> = {};
+          data.forEach((item: any) => map[item.symbol] = parseFloat(item.price));
+          setAllPrices(map);
         })
         .catch(console.error);
     }
@@ -827,7 +827,7 @@ export default function CryptoPanel({ onOpenChange }: { onOpenChange?: (open: bo
                             setIsSelectOpen(false);
                           }
                         }}
-                        className="bg-card w-full sm:w-[340px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
+                        className="bg-card w-full sm:w-[437px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
                       >
                         {/* Grabber Handle (Mobile Only) */}
                         <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden shrink-0" />

@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const symbol = searchParams.get("symbol") || "BBCA.JK";
+    let symbol = searchParams.get("symbol") || "BBCA.JK";
+    if (symbol === "IHSG" || symbol === "IHSG.JK") {
+      symbol = "^JKSE";
+    }
     const interval = searchParams.get("interval") || "1d";
 
     // Map standard intervals to Yahoo intervals & ranges

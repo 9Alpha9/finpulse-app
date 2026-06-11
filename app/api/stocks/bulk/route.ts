@@ -3,38 +3,33 @@ import { stockTickers } from "@/src/lib/stocks";
 
 export async function GET() {
   try {
-    // Kumpulkan semua simbol (tambahkan .JK untuk saham Indonesia)
     const symbols = [
-      "^JKSE", 
+      "^JKSE",
       ...Object.keys(stockTickers).filter(s => s !== "IHSG").map(s => `${s}.JK`)
     ];
-    
-    // Yahoo Finance aman melayani ~50 simbol sekaligus dalam satu request quote
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`;
-    
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      },
-      next: { revalidate: 60 } // Cache selama 1 menit agar tidak rate-limit
+
+    const priceMap: Record<string, number> = {};
+
+    // Gunakan v8/chart secara paralel karena v7/quote sering terkena blokir (401)
+    const promises = symbols.map(async (sym) => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        next: { revalidate: 60 } // Cache 60 detik
+      });
+
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (meta?.regularMarketPrice) {
+        let cleanSym = sym.replace(".JK", "");
+        if (sym === "^JKSE") cleanSym = "IHSG";
+        priceMap[cleanSym] = meta.regularMarketPrice;
+      }
     });
 
-    if (!res.ok) {
-      throw new Error(`Yahoo Finance responded with status: ${res.status}`);
-    }
-
-    const data = await res.json();
-    const results = data.quoteResponse?.result || [];
-
-    // Format menjadi map { "BBCA": 10250, "IHSG": 7200, ... }
-    const priceMap: Record<string, number> = {};
-    for (const item of results) {
-      let sym = item.symbol.replace(".JK", "");
-      if (item.symbol === "^JKSE") sym = "IHSG";
-      if (item.regularMarketPrice) {
-        priceMap[sym] = item.regularMarketPrice;
-      }
-    }
+    await Promise.allSettled(promises);
 
     return NextResponse.json(priceMap);
   } catch (err: any) {

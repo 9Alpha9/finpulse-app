@@ -96,12 +96,14 @@ function LiveStockPrice({ symbol, basePrice, mainPrice }: { symbol: string, base
     }
   }, [mainPrice]);
 
-  // Jitter simulation for non-selected stocks
+  // Jitter simulation for non-selected stocks (Diperbaiki agar tidak memicu double calculation)
   useEffect(() => {
-    if (mainPrice !== undefined) return; // Jangan lakukan simulasi jika ini adalah stok yang dipilih (disinkronisasi)
+    if (mainPrice !== undefined) return;
 
     let active = true;
-    const interval = setInterval(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const simulateJitter = () => {
       if (!active) return;
       const newPrice = basePrice ?? getStockInfo(symbol).price;
       const jitter = Math.round((Math.random() - 0.5) * (newPrice * 0.003));
@@ -112,12 +114,16 @@ function LiveStockPrice({ symbol, basePrice, mainPrice }: { symbol: string, base
         else if (finalPrice < prev) setTickDirection("down");
         return finalPrice;
       });
+
       setTimeout(() => { if (active) setTickDirection("neutral"); }, 300);
-    }, 2000 + Math.random() * 2000);
+      timeoutId = setTimeout(simulateJitter, 2000 + Math.random() * 2000);
+    };
+
+    timeoutId = setTimeout(simulateJitter, 2000 + Math.random() * 2000);
 
     return () => {
       active = false;
-      clearInterval(interval);
+      clearTimeout(timeoutId);
     };
   }, [symbol, mainPrice, basePrice]);
 
@@ -212,21 +218,20 @@ const getThemeColors = (isDark: boolean) => ({
 const TimeframeDropdown = ({
   value,
   onChange,
-  onOpenChange, // <--- TAMBAHAN: Prop untuk komunikasi ke BottomNav
+  onOpenChange,
 }: {
   value: string;
   onChange: (v: string) => void;
-  onOpenChange?: (open: boolean) => void; // <--- TAMBAHAN
+  onOpenChange?: (open: boolean) => void;
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
 
-  // Fungsi toggle tersentralisasi
   const toggle = (isOpen: boolean) => {
     setOpen(isOpen);
-    onOpenChange?.(isOpen); // Kirim sinyal ke parent untuk hide BottomNav
+    onOpenChange?.(isOpen);
   };
 
   useEffect(() => {
@@ -250,33 +255,31 @@ const TimeframeDropdown = ({
       <AnimatePresence>
         {open && (
           <>
-            {/* Backdrop Gelap Khusus Mobile */}
             <motion.div
+              key="tf-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
+            // onClick dihilangkan sesuai permintaan
             />
 
-            {/* Panel Pilihan Waktu (DENGAN DRAG TO CLOSE) */}
             <motion.div
+              key="tf-panel"
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }} // Transisi lebih memantul natural
-              // ── FITUR SWIPE TO CLOSE (DRAG) ──
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
               drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }} // Tidak bisa ditarik ke atas melewati batas
-              dragElastic={0.2} // Efek karet saat ditarik
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.2}
               onDragEnd={(e, { offset, velocity }) => {
-                // Jika ditarik ke bawah lebih dari 80px ATAU ditarik dengan cepat
                 if (offset.y > 80 || velocity.y > 300) {
                   toggle(false);
                 }
               }}
               className="fixed inset-x-0 bottom-0 z-[9999] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
             >
-              {/* Grabber Handle (Garis penanda bisa ditarik) */}
               <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden cursor-grab active:cursor-grabbing" />
 
               <div className="max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
@@ -306,7 +309,7 @@ const TimeframeDropdown = ({
                             key={item.value}
                             onClick={() => {
                               onChange(item.value);
-                              toggle(false); // Tutup menu & show BottomNav
+                              toggle(false);
                             }}
                             className={`rounded-lg sm:rounded-md px-3 py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center flex-1 min-w-[50px] ${isActive
                               ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
@@ -359,7 +362,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
     }
   }, [isSelectOpen]);
 
-  // --- STATE BARU UNTUK EFEK LIVE ---
   const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
   const prevPriceRef = useRef<number>(0);
   const anchorPriceRef = useRef<number>(0);
@@ -378,9 +380,12 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
 
   useEffect(() => {
     onOpenChange?.(isSelectOpen);
+    if (isSelectOpen) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "unset";
+    return () => { document.body.style.overflow = "unset"; };
   }, [isSelectOpen, onOpenChange]);
 
-  // --- EFEK PERUBAHAN WARNA TICK LIVE ---
+  // PERBAIKAN: Menambahkan logic reset "neutral" untuk warna kedip tick direction
   useEffect(() => {
     if (!stock) return;
     if (stock.price > prevPriceRef.current && prevPriceRef.current !== 0) {
@@ -391,9 +396,11 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
     if (stock.price > 0) {
       prevPriceRef.current = stock.price;
     }
+
+    const t = setTimeout(() => setTickDirection("neutral"), 300);
+    return () => clearTimeout(t);
   }, [stock?.price]);
 
-  // --- LOGIC FETCHING DATA UTAMA ---
   useEffect(() => {
     let active = true;
     const cacheKey = `${selectedStock}_${interval}`;
@@ -435,7 +442,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
         const meta = stockTickers[selectedStock] ?? stockTickers.BBCA;
 
-        anchorPriceRef.current = lastClose; // Set anchor price
+        anchorPriceRef.current = lastClose;
 
         if (active) setStock({ ...meta, price: lastClose, change, changePercent, prevClose } as StockInfo);
         return;
@@ -458,7 +465,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
           const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
           const meta = stockTickers[selectedStock] ?? stockTickers.BBCA;
 
-          anchorPriceRef.current = lastClose; // Set anchor price
+          anchorPriceRef.current = lastClose;
 
           setStock({ ...meta, price: lastClose, change, changePercent, prevClose } as StockInfo);
         } else {
@@ -474,7 +481,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
           klineCache.current.set(cacheKey, mockKlines);
           applyToChart(mockKlines);
           const meta = getStockInfo(selectedStock);
-          anchorPriceRef.current = meta.price; // Set anchor price
+          anchorPriceRef.current = meta.price;
           setStock(meta);
         }
       } finally {
@@ -486,50 +493,55 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
     return () => { active = false; };
   }, [selectedStock, interval]);
 
-  // --- EFEK LIVE SIMULATOR (Micro-Drifting Bid/Offer) ---
+  // PERBAIKAN: Menggunakan Ref untuk stock agar menghindari infinite loop dependency yang menciptakan tumpang tindih timeout
+  const stockRef = useRef<StockInfo | null>(null);
+  useEffect(() => {
+    stockRef.current = stock;
+  }, [stock]);
+
   useEffect(() => {
     let active = true;
+    let timeoutId: NodeJS.Timeout;
 
-    // Interval update yang acak antara 2 - 5 detik layaknya transaksi di bursa
     const simulateLiveTick = () => {
-      if (!active || !stock || anchorPriceRef.current === 0) return;
+      if (!active || !stockRef.current || anchorPriceRef.current === 0) {
+        if (active) timeoutId = setTimeout(simulateLiveTick, 2000);
+        return;
+      }
 
-      // Harga di pasar saham bergerak dalam "fraksi" harga (tick size). 
-      // Contoh saham > Rp 5000 bergerak Rp 25. Di bawah itu bergerak Rp 5 atau Rp 10.
+      const currentStock = stockRef.current;
       const basePrice = anchorPriceRef.current;
       let tickSize = 5;
+
       if (basePrice > 5000) tickSize = 25;
       else if (basePrice > 2000) tickSize = 10;
       else if (basePrice < 500) tickSize = 1;
 
-      // Peluang 70% harga tidak berubah, 15% naik, 15% turun (agar tidak terlalu liar bergeraknya)
       const randomAction = Math.random();
-      let newPrice = stock.price;
+      let newPrice = currentStock.price;
 
       if (randomAction > 0.85) {
-        newPrice = stock.price + tickSize; // Naik 1 tick
+        newPrice = currentStock.price + tickSize;
       } else if (randomAction < 0.15) {
-        newPrice = stock.price - tickSize; // Turun 1 tick
+        newPrice = currentStock.price - tickSize;
       }
 
-      // Pastikan harga tidak menyimpang lebih dari 0.5% dari harga jangkar (anchor price hari ini)
       const maxDeviation = basePrice * 0.005;
       if (Math.abs(newPrice - basePrice) > maxDeviation) {
-        newPrice = basePrice; // Kembalikan ke harga asli jika terlalu melenceng
+        newPrice = basePrice;
       }
 
-      if (newPrice !== stock.price) {
-        const change = newPrice - stock.prevClose;
-        const changePercent = stock.prevClose > 0 ? (change / stock.prevClose) * 100 : 0;
+      if (newPrice !== currentStock.price) {
+        const change = newPrice - currentStock.prevClose;
+        const changePercent = currentStock.prevClose > 0 ? (change / currentStock.prevClose) * 100 : 0;
 
         setStock({
-          ...stock,
+          ...currentStock,
           price: newPrice,
           change: change,
           changePercent: changePercent
         });
 
-        // Update the chart to match the new simulated price
         if (interval === "1d" && candlestickSeriesRef.current && lastBarRef.current) {
           const lb = { ...lastBarRef.current };
           lb.close = newPrice;
@@ -541,18 +553,16 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         }
       }
 
-      // Rekursif dengan jeda acak
       timeoutId = setTimeout(simulateLiveTick, Math.random() * 3000 + 2000);
     };
 
-    let timeoutId = setTimeout(simulateLiveTick, 3000);
+    timeoutId = setTimeout(simulateLiveTick, 3000);
 
     return () => {
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [stock]);
-
+  }, [interval, selectedStock]);
 
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -643,6 +653,11 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
     saveWatchlistV2(next);
   };
 
+  const filteredStocks = Object.keys(stockTickers).filter((sym) =>
+    sym.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stockTickers[sym]?.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-4 md:space-y-6">
 
@@ -653,7 +668,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         </div>
       )}
 
-      {/* Stock Header — Responsif Mobile (flex-col di layar kecil) */}
+      {/* Stock Header — Responsif Mobile */}
       {stock && (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
 
@@ -676,7 +691,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
             <div>
               <div className="flex items-center gap-1.5 md:justify-end text-[10px] sm:text-sm font-semibold text-muted-foreground mb-1">
                 Harga Terakhir
-                {/* Indikator Titik Live (Tanda data sedang aktif berkedip) */}
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -684,7 +698,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
               </div>
               <motion.h3
                 animate={{
-                  // LOGIC WARNA ANIMASI KEDIP TICK SESUAI NAIK/TURUN
                   color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : (theme === "dark" ? "#f8fafc" : "#0f172a"),
                 }}
                 transition={{ duration: 0.2 }}
@@ -716,7 +729,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
       {/* Chart Card */}
       <div className="relative rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
 
-        {/* Controls Bar — Responsif Wrap */}
+        {/* Controls Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 md:pb-4 mb-4 md:mb-6 z-40 relative">
 
           <div className="flex items-center gap-2 flex-1 md:flex-none">
@@ -735,109 +748,99 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
 
               <AnimatePresence>
                 {isSelectOpen && (
-                  <>
-                    {/* Backdrop Gelap Statis */}
+                  <motion.div
+                    key="stock-modal-backdrop"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                  >
                     <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                      key="stock-modal-panel"
+                      initial={{ opacity: 0, y: "50%" }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: "100%" }}
+                      transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                      drag="y"
+                      dragConstraints={{ top: 0, bottom: 0 }}
+                      dragElastic={{ top: 0, bottom: 0.5 }}
+                      onDragEnd={(e, info) => {
+                        if (info.offset.y > 100 || info.velocity.y > 500) {
+                          setIsSelectOpen(false);
+                        }
+                      }}
+                      className="bg-card w-full sm:w-[437px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
                     >
-                      {/* Modal Container */}
-                      <motion.div
-                        initial={{ opacity: 0, y: "50%" }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: "100%" }}
-                        transition={{ type: "spring", damping: 25, stiffness: 220 }}
-                        drag="y"
-                        dragConstraints={{ top: 0, bottom: 0 }}
-                        dragElastic={{ top: 0, bottom: 0.5 }}
-                        onDragEnd={(e, info) => {
-                          if (info.offset.y > 100 || info.velocity.y > 500) {
-                            setIsSelectOpen(false);
-                          }
-                        }}
-                        className="bg-card w-full sm:w-[320px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
-                      >
-                        {/* Grabber Handle (Mobile Only) */}
-                        <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden shrink-0" />
+                      <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden shrink-0 cursor-grab active:cursor-grabbing" />
 
-                        {/* Header */}
-                        <div className="flex items-center justify-between border-b border-border/50 pb-3 mb-3 shrink-0">
-                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Pilih Emiten Saham
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setIsSelectOpen(false)}
-                            className="hidden sm:block text-xs font-extrabold uppercase tracking-wider text-brand-green hover:underline cursor-pointer select-none"
-                          >
-                            Tutup
-                          </button>
-                        </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-3 mb-3 shrink-0">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Pilih Emiten Saham
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsSelectOpen(false)}
+                          className="text-xs font-extrabold uppercase tracking-wider text-brand-green hover:underline cursor-pointer select-none"
+                        >
+                          Tutup
+                        </button>
+                      </div>
 
-                        {/* Search Input */}
-                        <div className="relative flex items-center shrink-0 mb-3">
-                          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                          <input
-                            type="text"
-                            placeholder="Cari emiten saham..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
-                          />
-                        </div>
+                      <div className="relative flex items-center shrink-0 mb-3">
+                        <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Cari emiten saham..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
+                        />
+                      </div>
 
-                        {/* List */}
-                        <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 scrollbar-thin">
-                          {Object.keys(stockTickers)
-                            .filter((sym) => sym.toLowerCase().includes(searchQuery.toLowerCase()) || stockTickers[sym]?.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                            .length > 0 ? (
-                            Object.keys(stockTickers)
-                              .filter((sym) => sym.toLowerCase().includes(searchQuery.toLowerCase()) || stockTickers[sym]?.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                              .map((sym) => {
-                                const ticker = stockTickers[sym];
-                                const isSelected = sym === selectedStock;
-                                return (
-                                  <button
-                                    key={sym}
-                                    onClick={() => { setSelectedStock(sym); setIsSelectOpen(false); setSearchQuery(""); }}
-                                    className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
-                                      ? "bg-brand-green/10 text-brand-green font-bold"
-                                      : "text-foreground hover:bg-secondary"
-                                      }`}
-                                  >
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="flex items-center gap-2.5 truncate pr-2">
-                                        <IDXStockLogoMini symbol={sym} />
-                                        <div className="truncate">
-                                          <div className="font-semibold">{sym}</div>
-                                          <div className="text-[9px] text-muted-foreground truncate w-full max-w-[150px]">
-                                            {ticker.name}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <LiveStockPrice symbol={sym} basePrice={allPrices[sym]} mainPrice={isSelected ? stock?.price : undefined} />
-                                        {isSelected ? (
-                                          <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
-                                        ) : (
-                                          <div className="h-3.5 w-3.5 shrink-0" />
-                                        )}
+                      <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 scrollbar-thin">
+                        {filteredStocks.length > 0 ? (
+                          filteredStocks.map((sym) => {
+                            const ticker = stockTickers[sym];
+                            const isSelected = sym === selectedStock;
+                            return (
+                              <button
+                                key={sym}
+                                onClick={() => { setSelectedStock(sym); setIsSelectOpen(false); setSearchQuery(""); }}
+                                className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
+                                  ? "bg-brand-green/10 text-brand-green font-bold"
+                                  : "text-foreground hover:bg-secondary"
+                                  }`}
+                              >
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center gap-2.5 truncate pr-2">
+                                    <IDXStockLogoMini symbol={sym} />
+                                    <div className="truncate">
+                                      <div className="font-semibold">{sym}</div>
+                                      <div className="text-[9px] text-muted-foreground truncate w-full max-w-[150px]">
+                                        {ticker.name}
                                       </div>
                                     </div>
-                                  </button>
-                                );
-                              })
-                          ) : (
-                            <div className="py-10 text-center text-xs text-muted-foreground">
-                              Emiten tidak ditemukan.
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <LiveStockPrice symbol={sym} basePrice={allPrices[sym]} mainPrice={isSelected ? stock?.price : undefined} />
+                                    {isSelected ? (
+                                      <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
+                                    ) : (
+                                      <div className="h-3.5 w-3.5 shrink-0" />
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="py-10 text-center text-xs text-muted-foreground">
+                            Emiten tidak ditemukan.
+                          </div>
+                        )}
+                      </div>
                     </motion.div>
-                  </>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>
@@ -847,7 +850,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
               onOpenChange={onOpenChange} />
           </div>
 
-          {/* Watchlist Toggle & History Info */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end mt-1 md:mt-0">
             <button
               onClick={toggleWatchlist}
@@ -886,7 +888,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         </div>
       </div>
 
-      {/* Stock Stats — Responsif Grid (Sempurna di semua resolusi) */}
       {stock && (
         <div className="rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
           <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 sm:mb-4">
@@ -902,7 +903,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
             ].map((item, i) => (
               <div
                 key={item.label}
-                // Item kelima (Harga Kemarin) akan mengambil sisa ruang di HP, tapi normal di Desktop
                 className={`border border-border rounded-xl p-2.5 sm:p-3 bg-muted/20 flex flex-col justify-center ${i === 4 ? "col-span-2 md:col-span-1" : "col-span-1"
                   }`}
               >
@@ -914,7 +914,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         </div>
       )}
 
-      {/* Portfolio Tracker & Signal Configurator */}
       {stock && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <PortfolioTracker currentPrice={stock.price} activeSymbol={selectedStock} isStock={true} />
@@ -922,7 +921,6 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         </div>
       )}
 
-      {/* Letakkan di baris paling bawah, sebelum penutup tag div utama */}
       <div>
         <PaperTrading
           activeSymbol={selectedStock}

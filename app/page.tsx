@@ -51,6 +51,10 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
   useEffect(() => {
     let active = true;
     async function fetchKlines() {
+      // Prevent race condition fetches during tab transition
+      if (marketType === "crypto" && symbol === "IHSG") return;
+      if (marketType === "stocks" && symbol.includes("USDT")) return;
+
       setLoading(true);
       try {
         if (marketType === "crypto") {
@@ -66,7 +70,12 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
           }));
           if (active) setKlines(klineArr);
         } else {
-          const ticker = symbol.endsWith(".JK") ? symbol : `${symbol}.JK`;
+          let ticker = symbol;
+          if (symbol === "IHSG") {
+            ticker = "^JKSE";
+          } else if (!symbol.endsWith(".JK")) {
+            ticker = `${symbol}.JK`;
+          }
           const res = await fetch(`/api/stocks?symbol=${ticker}&interval=1d`);
           if (!res.ok) throw new Error("HTTP " + res.status);
           const data = await res.json();
