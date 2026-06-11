@@ -23,7 +23,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   const displayName = user?.name || "Tamim";
-  const isPremium   = subscriptionTier === "premium";
+  const isPremium = subscriptionTier === "premium";
 
   const handleToggleTier = () => {
     setSubscriptionTier(isPremium ? "free" : "premium");
@@ -49,10 +49,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </span>
 
         {/* Greeting — desktop only */}
-        <h1 className="hidden lg:flex items-center gap-1.5 text-sm font-semibold text-foreground truncate">
+        {/* <h1 className="hidden lg:flex items-center gap-1.5 text-sm font-semibold text-foreground truncate">
           Good Morning, <span className="font-extrabold">{displayName}</span>
           <span className="animate-bounce">👋</span>
-        </h1>
+        </h1> */}
       </div>
 
       {/* ── Right ───────────────────────────────────────────────────────────── */}
@@ -62,11 +62,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         <button
           onClick={handleToggleTier}
           title="Klik untuk toggle tier demo"
-          className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold tracking-wide transition cursor-pointer border ${
-            isPremium
+          className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold tracking-wide transition cursor-pointer border ${isPremium
               ? "bg-amber-500/10 border-amber-500/25 text-amber-500 hover:bg-amber-500/20"
               : "bg-muted border-border text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           {isPremium ? (
             <>
@@ -85,11 +84,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         <button
           onClick={handleToggleTier}
           title="Klik untuk toggle tier demo"
-          className={`sm:hidden flex items-center justify-center h-8 w-8 rounded-full border transition cursor-pointer ${
-            isPremium
+          className={`sm:hidden flex items-center justify-center h-8 w-8 rounded-full border transition cursor-pointer ${isPremium
               ? "bg-amber-500/10 border-amber-500/25 text-amber-500"
               : "bg-muted border-border text-muted-foreground"
-          }`}
+            }`}
         >
           {isPremium ? <Crown className="h-3.5 w-3.5 fill-current" /> : <Sparkles className="h-3.5 w-3.5" />}
         </button>
@@ -144,11 +142,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                   </div>
 
                   {/* Tier badge inside dropdown */}
-                  <div className={`mt-2 flex items-center gap-1 text-[9px] font-extrabold px-2 py-1 rounded-full w-fit ${
-                    isPremium
+                  <div className={`mt-2 flex items-center gap-1 text-[9px] font-extrabold px-2 py-1 rounded-full w-fit ${isPremium
                       ? "bg-amber-500/10 text-amber-500"
                       : "bg-muted text-muted-foreground"
-                  }`}>
+                    }`}>
                     {isPremium ? <Crown className="h-2.5 w-2.5 fill-current" /> : <Sparkles className="h-2.5 w-2.5" />}
                     {isPremium ? "Premium" : "Free Tier"}
                   </div>
