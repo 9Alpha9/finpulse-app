@@ -25,6 +25,7 @@ import {
 import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
+import { useStockPrices } from "@/app/context/StockPriceContext";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
 import PaperTrading from "./PaperTrading";
 
@@ -338,6 +339,8 @@ const TimeframeDropdown = ({
 
 export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const { theme } = useThemeAuth();
+  // ✅ Sumber harga + change real yang sama dengan MarketMarquee
+  const { quotes: contextQuotes } = useStockPrices();
 
   const [selectedStock, setSelectedStock] = useState<string>("IHSG");
   const [isSelectOpen, setIsSelectOpen] = useState(false);
@@ -348,19 +351,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
   const [stock, setStock] = useState<StockInfo | null>(null);
   const [interval, setIntervalState] = useState<string>("1d");
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [allPrices, setAllPrices] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    if (isSelectOpen) {
-      fetch("/api/stocks/bulk")
-        .then(r => r.json())
-        .then(data => {
-          if (!data.error) setAllPrices(data);
-        })
-        .catch(console.error);
-    }
-  }, [isSelectOpen]);
 
   const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
   const prevPriceRef = useRef<number>(0);
@@ -493,76 +484,41 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
     return () => { active = false; };
   }, [selectedStock, interval]);
 
-  // PERBAIKAN: Menggunakan Ref untuk stock agar menghindari infinite loop dependency yang menciptakan tumpang tindih timeout
-  const stockRef = useRef<StockInfo | null>(null);
+  // ─ Sync harga + change dari context (SUMBER YANG SAMA DENGAN MARQUEE) ───────
   useEffect(() => {
-    stockRef.current = stock;
-  }, [stock]);
+    if (!stock) return;
+    const q = contextQuotes[selectedStock];
+    if (!q) return;
 
-  useEffect(() => {
-    let active = true;
-    let timeoutId: NodeJS.Timeout;
+    const ctxPrice = q.price;
+    if (ctxPrice === stock.price) return;
 
-    const simulateLiveTick = () => {
-      if (!active || !stockRef.current || anchorPriceRef.current === 0) {
-        if (active) timeoutId = setTimeout(simulateLiveTick, 2000);
-        return;
-      }
+    if (ctxPrice > prevPriceRef.current && prevPriceRef.current !== 0) setTickDirection("up");
+    else if (ctxPrice < prevPriceRef.current && prevPriceRef.current !== 0) setTickDirection("down");
+    prevPriceRef.current = ctxPrice;
+    const t = setTimeout(() => setTickDirection("neutral"), 350);
 
-      const currentStock = stockRef.current;
-      const basePrice = anchorPriceRef.current;
-      let tickSize = 5;
+    // Gunakan change & changePercent REAL dari API, bukan kalkulasi ulang dari klines
+    setStock(prev => prev ? {
+      ...prev,
+      price: ctxPrice,
+      change: q.change,
+      changePercent: q.changePercent,
+    } : prev);
 
-      if (basePrice > 5000) tickSize = 25;
-      else if (basePrice > 2000) tickSize = 10;
-      else if (basePrice < 500) tickSize = 1;
-
-      const randomAction = Math.random();
-      let newPrice = currentStock.price;
-
-      if (randomAction > 0.85) {
-        newPrice = currentStock.price + tickSize;
-      } else if (randomAction < 0.15) {
-        newPrice = currentStock.price - tickSize;
-      }
-
-      const maxDeviation = basePrice * 0.005;
-      if (Math.abs(newPrice - basePrice) > maxDeviation) {
-        newPrice = basePrice;
-      }
-
-      if (newPrice !== currentStock.price) {
-        const change = newPrice - currentStock.prevClose;
-        const changePercent = currentStock.prevClose > 0 ? (change / currentStock.prevClose) * 100 : 0;
-
-        setStock({
-          ...currentStock,
-          price: newPrice,
-          change: change,
-          changePercent: changePercent
-        });
-
-        if (interval === "1d" && candlestickSeriesRef.current && lastBarRef.current) {
-          const lb = { ...lastBarRef.current };
-          lb.close = newPrice;
-          lb.high = Math.max(lb.high, newPrice);
-          lb.low = Math.min(lb.low, newPrice);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          candlestickSeriesRef.current.update(lb as any);
-          lastBarRef.current = lb;
-        }
-      }
-
-      timeoutId = setTimeout(simulateLiveTick, Math.random() * 3000 + 2000);
-    };
-
-    timeoutId = setTimeout(simulateLiveTick, 3000);
-
-    return () => {
-      active = false;
-      clearTimeout(timeoutId);
-    };
-  }, [interval, selectedStock]);
+    // Update candle terakhir di chart
+    if (interval === "1d" && candlestickSeriesRef.current && lastBarRef.current) {
+      const lb = { ...lastBarRef.current };
+      lb.close = ctxPrice;
+      lb.high = Math.max(lb.high, ctxPrice);
+      lb.low = Math.min(lb.low, ctxPrice);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      candlestickSeriesRef.current.update(lb as any);
+      lastBarRef.current = lb;
+    }
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextQuotes[selectedStock]?.price]);
 
   useEffect(() => {
     const container = chartContainerRef.current;

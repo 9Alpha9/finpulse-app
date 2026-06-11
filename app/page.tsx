@@ -23,6 +23,7 @@ import StockMarketScreener from "@/components/StockMarketScreener";
 import EconomicCalendar from "@/components/EconomicCalendar";
 import BottomNav from "@/components/BottomNav";
 import ProfilePanel from "@/components/ProfilePanel";
+import MarketMarquee from "@/components/MarketMarquee";
 
 import {
   ChevronRight,
@@ -204,6 +205,8 @@ export default function DashboardPage() {
           >
             {/* LEFT COLUMN */}
             <div className="space-y-6 lg:col-span-2">
+              <MarketMarquee marketType={marketType} />
+              
               {/* TRADING TERMINAL WIDGET */}
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">

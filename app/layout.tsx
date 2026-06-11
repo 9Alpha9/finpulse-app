@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeAuthProvider } from "@/app/context/ThemeAuthContext";
+import { StockPriceProvider } from "@/app/context/StockPriceContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +31,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
-        <ThemeAuthProvider>{children}</ThemeAuthProvider>
+        <ThemeAuthProvider>
+          <StockPriceProvider>
+            {children}
+          </StockPriceProvider>
+        </ThemeAuthProvider>
       </body>
     </html>
   );
