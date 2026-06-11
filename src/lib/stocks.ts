@@ -25,20 +25,45 @@ export interface StockInfo {
   prevClose: number;
 }
 
-// Daftar saham pilihan (LQ45 & Blue Chip Indonesia)
+// Daftar saham pilihan (termasuk yang logonya ada di folder lokal)
 export const stockTickers: Record<string, Omit<StockInfo, "price" | "change" | "changePercent" | "prevClose">> = {
-  IHSG: { symbol: "^JKSE", name: "IHSG (Composite Index)", sector: "Market Index", logo: "", peRatio: "-", dividendYield: "-", marketCap: "Rp 11.500 T", volume: "21.5B" },
-  BBCA: { symbol: "BBCA", name: "Bank Central Asia Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/e/fc/Logo_Bank_Central_Asia.svg/1200px-Logo_Bank_Central_Asia.svg.png", peRatio: "24.5x", dividendYield: "2.1%", marketCap: "Rp 1.263 T", volume: "82.4M" },
-  BBRI: { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/f/f3/Bank_Rakyat_Indonesia_logo.svg/1200px-Bank_Rakyat_Indonesia_logo.svg.png", peRatio: "14.8x", dividendYield: "4.8%", marketCap: "Rp 718 T", volume: "125.1M" },
-  BMRI: { symbol: "BMRI", name: "Bank Mandiri Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/a/ad/Bank_Mandiri_logo_2016.svg/1200px-Bank_Mandiri_logo_2016.svg.png", peRatio: "11.5x", dividendYield: "5.2%", marketCap: "Rp 582 T", volume: "61.3M" },
-  TLKM: { symbol: "TLKM", name: "Telkom Indonesia Tbk", sector: "Communication", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/7/75/Telkom_Indonesia_2013.svg/1200px-Telkom_Indonesia_2013.svg.png", peRatio: "15.2x", dividendYield: "3.9%", marketCap: "Rp 376 T", volume: "94.6M" },
-  ASII: { symbol: "ASII", name: "Astra International Tbk", sector: "Conglomerate", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/d/d7/Astra_International_logo.svg/1200px-Astra_International_logo.svg.png", peRatio: "7.8x", dividendYield: "6.8%", marketCap: "Rp 210 T", volume: "42.8M" },
-  BBNI: { symbol: "BBNI", name: "Bank Negara Indonesia Tbk", sector: "Financials", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/3/30/BNI_logo.svg/1200px-BNI_logo.svg.png", peRatio: "10.2x", dividendYield: "4.1%", marketCap: "Rp 195 T", volume: "35.2M" },
-  ICBP: { symbol: "ICBP", name: "Indofood CBP Sukses Makmur Tbk", sector: "Consumer Goods", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/5/52/Indofood_CBP_logo.svg/1200px-Indofood_CBP_logo.svg.png", peRatio: "18.5x", dividendYield: "2.4%", marketCap: "Rp 132 T", volume: "12.5M" },
-  UNVR: { symbol: "UNVR", name: "Unilever Indonesia Tbk", sector: "Consumer Goods", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/4/41/Unilever_logo.svg/1200px-Unilever_logo.svg.png", peRatio: "28.3x", dividendYield: "4.2%", marketCap: "Rp 105 T", volume: "22.8M" },
-  GOTO: { symbol: "GOTO", name: "GoTo Gojek Tokopedia Tbk", sector: "Technology", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/GoTo_logo.svg/1200px-GoTo_logo.svg.png", peRatio: "-", dividendYield: "-", marketCap: "Rp 85 T", volume: "950M" },
-  KLBF: { symbol: "KLBF", name: "Kalbe Farma Tbk", sector: "Healthcare", logo: "https://upload.wikimedia.org/wikipedia/id/thumb/e/e6/Logo_Kalbe_Farma.svg/1200px-Logo_Kalbe_Farma.svg.png", peRatio: "22.1x", dividendYield: "2.0%", marketCap: "Rp 78 T", volume: "18.4M" },
-  WBSA: { symbol: "WBSA", name: "Wahana Buana Samudra Tbk", sector: "Logistics", logo: "https://wahanabuanasamudra.com/wp-content/uploads/2021/04/cropped-logo-wbs-200x200.png", peRatio: "12.8x", dividendYield: "4.5%", marketCap: "Rp 2.4 T", volume: "15.1M" },
+  IHSG: { symbol: "^JKSE", name: "IHSG (Composite Index)", sector: "Market Index", logo: "/img/indexLogo/IHSG.png", peRatio: "-", dividendYield: "-", marketCap: "Rp 11.500 T", volume: "21.5B" },
+  BBCA: { symbol: "BBCA", name: "Bank Central Asia Tbk", sector: "Financials", logo: "/img/indexLogo/BBCA.png", peRatio: "24.5x", dividendYield: "2.1%", marketCap: "Rp 1.263 T", volume: "82.4M" },
+  BBRI: { symbol: "BBRI", name: "Bank Rakyat Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BBRI.png", peRatio: "14.8x", dividendYield: "4.8%", marketCap: "Rp 718 T", volume: "125.1M" },
+  BMRI: { symbol: "BMRI", name: "Bank Mandiri Tbk", sector: "Financials", logo: "/img/indexLogo/BMRI.png", peRatio: "11.5x", dividendYield: "5.2%", marketCap: "Rp 582 T", volume: "61.3M" },
+  BBNI: { symbol: "BBNI", name: "Bank Negara Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BBNI.png", peRatio: "10.2x", dividendYield: "4.1%", marketCap: "Rp 195 T", volume: "35.2M" },
+  TLKM: { symbol: "TLKM", name: "Telkom Indonesia Tbk", sector: "Communication", logo: "/img/indexLogo/TLKM.png", peRatio: "15.2x", dividendYield: "3.9%", marketCap: "Rp 376 T", volume: "94.6M" },
+  ASII: { symbol: "ASII", name: "Astra International Tbk", sector: "Conglomerate", logo: "/img/indexLogo/ASII.png", peRatio: "7.8x", dividendYield: "6.8%", marketCap: "Rp 210 T", volume: "42.8M" },
+  ICBP: { symbol: "ICBP", name: "Indofood CBP Sukses Makmur Tbk", sector: "Consumer Goods", logo: "/img/indexLogo/ICBP.png", peRatio: "18.5x", dividendYield: "2.4%", marketCap: "Rp 132 T", volume: "12.5M" },
+  UNVR: { symbol: "UNVR", name: "Unilever Indonesia Tbk", sector: "Consumer Goods", logo: "/img/indexLogo/UNVR.png", peRatio: "28.3x", dividendYield: "4.2%", marketCap: "Rp 105 T", volume: "22.8M" },
+  GOTO: { symbol: "GOTO", name: "GoTo Gojek Tokopedia Tbk", sector: "Technology", logo: "/img/indexLogo/GOTO.png", peRatio: "-", dividendYield: "-", marketCap: "Rp 85 T", volume: "950M" },
+  KLBF: { symbol: "KLBF", name: "Kalbe Farma Tbk", sector: "Healthcare", logo: "/img/indexLogo/KLBF.png", peRatio: "22.1x", dividendYield: "2.0%", marketCap: "Rp 78 T", volume: "18.4M" },
+  WBSA: { symbol: "WBSA", name: "Wahana Buana Samudra Tbk", sector: "Logistics", logo: "/img/indexLogo/WBSA.png", peRatio: "12.8x", dividendYield: "4.5%", marketCap: "Rp 2.4 T", volume: "15.1M" },
+  // Saham tambahan dari folder indexLogo
+  AGRO: { symbol: "AGRO", name: "Bank Raya Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/AGRO.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  AHAP: { symbol: "AHAP", name: "Asuransi Harta Aman Pratama Tbk", sector: "Financials", logo: "/img/indexLogo/AHAP.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  ARTO: { symbol: "ARTO", name: "Bank Jago Tbk", sector: "Financials", logo: "/img/indexLogo/ARTO.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BABP: { symbol: "BABP", name: "Bank MNC Internasional Tbk", sector: "Financials", logo: "/img/indexLogo/BABP.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BBHI: { symbol: "BBHI", name: "Allo Bank Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BBHI.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BBKP: { symbol: "BBKP", name: "Bank KB Bukopin Tbk", sector: "Financials", logo: "/img/indexLogo/BBKP.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BBTN: { symbol: "BBTN", name: "Bank Tabungan Negara Tbk", sector: "Financials", logo: "/img/indexLogo/BBTN.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BBYB: { symbol: "BBYB", name: "Bank Neo Commerce Tbk", sector: "Financials", logo: "/img/indexLogo/BBYB.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BDMN: { symbol: "BDMN", name: "Bank Danamon Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BDMN.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BFIN: { symbol: "BFIN", name: "BFI Finance Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BFIN.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BGTG: { symbol: "BGTG", name: "Bank Ganesha Tbk", sector: "Financials", logo: "/img/indexLogo/BGTG.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BJBR: { symbol: "BJBR", name: "Bank Pembangunan Daerah Jabar Banten", sector: "Financials", logo: "/img/indexLogo/BJBR.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BJTM: { symbol: "BJTM", name: "Bank Pembangunan Daerah Jatim", sector: "Financials", logo: "/img/indexLogo/BJTM.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BNGA: { symbol: "BNGA", name: "Bank CIMB Niaga Tbk", sector: "Financials", logo: "/img/indexLogo/BNGA.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BRIS: { symbol: "BRIS", name: "Bank Syariah Indonesia Tbk", sector: "Financials", logo: "/img/indexLogo/BRIS.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  BTPS: { symbol: "BTPS", name: "Bank BTPN Syariah Tbk", sector: "Financials", logo: "/img/indexLogo/BTPS.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  COIN: { symbol: "COIN", name: "Coin Exchange", sector: "Financials", logo: "/img/indexLogo/COIN.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  DEFI: { symbol: "DEFI", name: "Danasupra Erapacific Tbk", sector: "Financials", logo: "/img/indexLogo/DEFI.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  INPC: { symbol: "INPC", name: "Bank Artha Graha Internasional Tbk", sector: "Financials", logo: "/img/indexLogo/INPC.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  NISP: { symbol: "NISP", name: "Bank OCBC NISP Tbk", sector: "Financials", logo: "/img/indexLogo/NISP.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  PADI: { symbol: "PADI", name: "Minna Padi Investama Sekuritas Tbk", sector: "Financials", logo: "/img/indexLogo/PADI.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  PNLF: { symbol: "PNLF", name: "Panin Financial Tbk", sector: "Financials", logo: "/img/indexLogo/PNLF.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  SRTG: { symbol: "SRTG", name: "Saratoga Investama Sedaya Tbk", sector: "Financials", logo: "/img/indexLogo/SRTG.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
+  SUPA: { symbol: "SUPA", name: "Suparma Tbk", sector: "Basic Materials", logo: "/img/indexLogo/SUPA.png", peRatio: "-", dividendYield: "-", marketCap: "-", volume: "-" },
 };
 
 // Seed data harga untuk simulasi (Base Price dalam Rupiah)

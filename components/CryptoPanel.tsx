@@ -22,10 +22,68 @@ import {
   fetchActiveCryptoPairs,
   KlineData,
 } from "@/src/lib/binance";
-import { createChart, CandlestickSeries, ColorType } from "lightweight-charts";
+import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
 import PaperTrading from "./PaperTrading";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Price Component untuk Modal
+// ─────────────────────────────────────────────────────────────────────────────
+function LiveCryptoPrice({ symbol, basePrice, mainPrice }: { symbol: string; basePrice: number | null; mainPrice?: number }) {
+  const [price, setPrice] = useState(mainPrice || basePrice || 0);
+  const [tickDirection, setTickDirection] = useState<"up" | "down" | "neutral">("neutral");
+
+  // Sync with mainPrice if it is the selected crypto
+  useEffect(() => {
+    if (mainPrice !== undefined) {
+      setPrice(prev => {
+        if (mainPrice > prev) setTickDirection("up");
+        else if (mainPrice < prev) setTickDirection("down");
+        return mainPrice;
+      });
+      const t = setTimeout(() => setTickDirection("neutral"), 300);
+      return () => clearTimeout(t);
+    }
+  }, [mainPrice]);
+
+  // Jitter simulation for non-selected cryptos
+  useEffect(() => {
+    if (mainPrice !== undefined) return; // Jangan lakukan simulasi jika tersinkronisasi
+    if (!basePrice) return;
+    setPrice(basePrice);
+    
+    let active = true;
+    const interval = setInterval(() => {
+      if (!active) return;
+      const jitter = (Math.random() - 0.5) * (basePrice * 0.002);
+      const newPrice = basePrice + jitter;
+      setPrice(prev => {
+        if (newPrice > prev) setTickDirection("up");
+        else if (newPrice < prev) setTickDirection("down");
+        return newPrice;
+      });
+      setTimeout(() => { if (active) setTickDirection("neutral"); }, 300);
+    }, 2000 + Math.random() * 3000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [basePrice, mainPrice]);
+
+  if (price === 0) return <span className="text-muted-foreground animate-pulse">...</span>;
+
+  return (
+    <motion.div
+      animate={{ color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : undefined }}
+      transition={{ duration: 0.1 }}
+      className="text-xs font-bold tabular-nums text-right transition-colors whitespace-nowrap pl-2"
+    >
+      ${price < 0.01 ? price.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 }) : price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </motion.div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -167,28 +225,28 @@ const CoinIcon = ({
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TimeframeDropdown (Telah Disempurnakan: Posisi & Layout Melar Otomatis)
+// TimeframeDropdown (Crypto - Dengan Swipe-to-Close & Auto-Hide BottomNav)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TimeframeDropdown = ({
   value,
   onChange,
+  onOpenChange, // <--- Prop untuk menyembunyikan BottomNav
 }: {
   value: string;
   onChange: (v: string) => void;
+  onOpenChange?: (open: boolean) => void;
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const selected = ALL_TIMEFRAMES.find((t) => t.value === value);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  // Fungsi toggle tersentralisasi
+  const toggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    onOpenChange?.(isOpen); // Kirim sinyal ke parent
+  };
 
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
@@ -199,7 +257,7 @@ const TimeframeDropdown = ({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => toggle(!open)}
         className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs sm:text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
       >
         <span className="text-brand-green">{selected?.label ?? value}</span>
@@ -217,23 +275,40 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
-              onClick={() => setOpen(false)}
             />
 
-            {/* Panel Pilihan Waktu */}
+            {/* Panel Pilihan Waktu (DENGAN DRAG TO CLOSE) */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 30 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              // PERUBAHAN UTAMA: sm:left-0 dan penyesuaian lebar sm:w-[300px]
-              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
+              exit={{ opacity: 0, y: "200%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              // ── FITUR SWIPE TO CLOSE (DRAG) ──
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, { offset, velocity }) => {
+                if (offset.y > 80 || velocity.y > 300) {
+                  toggle(false);
+                }
+              }}
+              className="fixed inset-x-0 bottom-0 z-[9999] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
             >
-              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden" />
+              {/* Grabber Handle */}
+              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden cursor-grab active:cursor-grabbing" />
 
               <div className="max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
-                <div className="px-1 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 sm:mb-1.5 border-b border-border/50 pb-2">
-                  Pilih Rentang Waktu
+                <div className="flex items-center justify-between px-1 py-1 mb-2 sm:mb-1.5 border-b border-border/50 pb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                    Pilih Rentang Waktu
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggle(false)}
+                    className="text-[10px] font-extrabold uppercase tracking-widest text-brand-green hover:underline cursor-pointer select-none"
+                  >
+                    Batal
+                  </button>
                 </div>
 
                 {TIMEFRAME_GROUPS.map((group) => (
@@ -241,7 +316,6 @@ const TimeframeDropdown = ({
                     <div className="px-1 py-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">
                       {group.group}
                     </div>
-                    {/* Menggunakan flex-wrap dan flex-1 agar tombol mengisi ruang dengan rapi */}
                     <div className="flex flex-wrap gap-1.5">
                       {group.items.map((item) => {
                         const isActive = item.value === value;
@@ -250,11 +324,11 @@ const TimeframeDropdown = ({
                             key={item.value}
                             onClick={() => {
                               onChange(item.value);
-                              setOpen(false);
+                              toggle(false); // Tutup menu
                             }}
                             className={`rounded-lg sm:rounded-md px-3 py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center flex-1 min-w-[50px] ${isActive
-                                ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
-                                : "text-foreground bg-secondary/30 sm:bg-secondary/40 hover:bg-secondary"
+                              ? "bg-brand-green text-white shadow-md sm:shadow-sm shadow-brand-green/30"
+                              : "text-foreground bg-secondary/30 sm:bg-secondary/40 hover:bg-secondary"
                               }`}
                           >
                             {item.label}
@@ -277,7 +351,7 @@ const TimeframeDropdown = ({
 // CryptoPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function CryptoPanel() {
+export default function CryptoPanel({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const { subscriptionTier, setSubscriptionTier, theme } = useThemeAuth();
   const isPremium = subscriptionTier === "premium";
 
@@ -294,6 +368,21 @@ export default function CryptoPanel() {
   const [isLoadingChart, setIsLoadingChart] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+
+  const [allPrices, setAllPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (isSelectOpen) {
+      fetch("/api/crypto/price")
+        .then(r => r.json())
+        .then(data => {
+           const map: Record<string, number> = {};
+           data.forEach((item: any) => map[item.symbol] = parseFloat(item.price));
+           setAllPrices(map);
+        })
+        .catch(console.error);
+    }
+  }, [isSelectOpen]);
 
   const priceRef = useRef(currentPrice);
   priceRef.current = currentPrice;
@@ -326,13 +415,8 @@ export default function CryptoPanel() {
       : price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
-        setIsSelectOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+    onOpenChange?.(isSelectOpen);
+  }, [isSelectOpen, onOpenChange]);
 
   useEffect(() => {
     fetchActiveCryptoPairs()
@@ -721,55 +805,105 @@ export default function CryptoPanel() {
 
               <AnimatePresence>
                 {isSelectOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute left-0 mt-1.5 w-[240px] sm:w-60 rounded-xl border border-border bg-card shadow-lg p-2.5 z-50 max-h-80 overflow-hidden flex flex-col"
-                  >
-                    <div className="relative flex items-center shrink-0">
-                      <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="Cari crypto..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
-                      />
-                    </div>
-                    <div className="flex-1 overflow-y-auto mt-2 space-y-0.5 pr-1 scrollbar-thin">
-                      {filteredPairs.length > 0 ? (
-                        filteredPairs.map((pair) => {
-                          const base = getSymbolBase(pair);
-                          const isSelected = pair === symbol;
-                          return (
-                            <button
-                              key={pair}
-                              onClick={() => { setSymbol(pair); setIsSelectOpen(false); setSearchQuery(""); }}
-                              className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
-                                ? "bg-brand-green/10 text-brand-green font-bold"
-                                : "text-foreground hover:bg-secondary"
-                                }`}
-                            >
-                              <div className="flex items-center gap-2 truncate pr-2">
-                                <CoinIcon base={base} className="h-4 w-4 shrink-0" />
-                                <span className="truncate">{base} / USDT</span>
-                              </div>
-                              {isSelected && <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />}
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="text-[10px] text-muted-foreground text-center py-4">Koin tidak ditemukan</div>
-                      )}
-                    </div>
-                  </motion.div>
+                  <>
+                    {/* Backdrop Gelap Statis */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-[9999] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                    >
+                      {/* Modal Container */}
+                      <motion.div
+                        initial={{ opacity: 0, y: "50%" }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: "100%" }}
+                        transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                        drag="y"
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={{ top: 0, bottom: 0.5 }}
+                        onDragEnd={(e, info) => {
+                          if (info.offset.y > 100 || info.velocity.y > 500) {
+                            setIsSelectOpen(false);
+                          }
+                        }}
+                        className="bg-card w-full sm:w-[340px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
+                      >
+                        {/* Grabber Handle (Mobile Only) */}
+                        <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden shrink-0" />
+
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b border-border/50 pb-3 mb-3 shrink-0">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Pilih Aset Crypto
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsSelectOpen(false)}
+                            className="hidden sm:block text-xs font-extrabold uppercase tracking-wider text-brand-green hover:underline cursor-pointer select-none"
+                          >
+                            Tutup
+                          </button>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative flex items-center shrink-0 mb-3">
+                          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <input
+                            type="text"
+                            placeholder="Cari crypto..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-brand-green"
+                          />
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-y-auto space-y-0.5 pr-1 scrollbar-thin">
+                          {filteredPairs.length > 0 ? (
+                            filteredPairs.map((pair) => {
+                              const base = getSymbolBase(pair);
+                              const isSelected = pair === symbol;
+                              return (
+                                <button
+                                  key={pair}
+                                  onClick={() => { setSymbol(pair); setIsSelectOpen(false); setSearchQuery(""); }}
+                                  className={`flex items-center justify-between w-full rounded-lg px-2.5 py-2 text-xs text-left transition ${isSelected
+                                    ? "bg-brand-green/10 text-brand-green font-bold"
+                                    : "text-foreground hover:bg-secondary"
+                                    }`}
+                                >
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-2 truncate pr-2">
+                                      <CoinIcon base={base} className="h-4 w-4 shrink-0" />
+                                      <span className="truncate">{base} / USDT</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <LiveCryptoPrice symbol={pair} basePrice={allPrices[pair] || null} mainPrice={isSelected ? currentPrice : undefined} />
+                                      {isSelected ? (
+                                        <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
+                                      ) : (
+                                        <div className="h-3.5 w-3.5 shrink-0" />
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="text-[10px] text-muted-foreground text-center py-4">Koin tidak ditemukan</div>
+                          )}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  </>
                 )}
               </AnimatePresence>
             </div>
 
-            <TimeframeDropdown value={interval} onChange={(v) => setIntervalState(v)} />
+            <TimeframeDropdown value={interval}
+              onChange={(v) => setIntervalState(v)}
+              onOpenChange={onOpenChange} />
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end mt-1 md:mt-0">

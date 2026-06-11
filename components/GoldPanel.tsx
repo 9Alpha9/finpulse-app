@@ -131,35 +131,44 @@ async function fetchGoldQuote(symbol: string): Promise<GoldQuote | null> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Gold Icon
-// ─────────────────────────────────────────────────────────────────────────────
+const GOLD_LOGOS: Record<string, string> = {
+  "GLD": "https://logo.clearbit.com/ssga.com",
+  "IAU": "https://logo.clearbit.com/ishares.com",
+  "SGOL": "https://logo.clearbit.com/abrdn.com",
+  "GLDM": "https://logo.clearbit.com/ssga.com",
+  "GDX": "https://logo.clearbit.com/vaneck.com",
+  "GDXJ": "https://logo.clearbit.com/vaneck.com",
+  "GOLD": "https://logo.clearbit.com/barrick.com",
+  "NEM": "https://logo.clearbit.com/newmont.com",
+  "AEM": "https://logo.clearbit.com/agnicoeagle.com",
+  "ANTM.JK": "https://logo.clearbit.com/antam.com",
+  "MDKA.JK": "https://logo.clearbit.com/merdekacoppergold.com",
+};
 
 function GoldIcon({ symbol, size = 40 }: { symbol: string; size?: number }) {
-  const isIDX = symbol.endsWith(".JK");
-  const isMiner = ["GOLD", "NEM", "AEM"].includes(symbol);
+  const [err, setErr] = useState(false);
+  const logoUrl = GOLD_LOGOS[symbol];
 
-  if (isIDX) {
-    const initials = symbol.replace(".JK", "").slice(0, 4);
+  if (err || !logoUrl) {
+    const cleanSym = symbol.replace("=F", "").replace(".JK", "").slice(0, 3);
     return (
       <div
-        className="flex items-center justify-center rounded-xl font-bold text-white bg-blue-600 shrink-0"
-        style={{ width: size, height: size, fontSize: size * 0.26, borderRadius: size * 0.25 }}
+        className="flex items-center justify-center rounded-xl font-bold text-white bg-slate-500 shrink-0"
+        style={{ width: size, height: size, fontSize: size * 0.28, borderRadius: size * 0.25 }}
       >
-        {initials}
+        {cleanSym}
       </div>
     );
   }
 
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-      <rect width="40" height="40" rx="10" fill={isMiner ? "#92400e" : "#D97706"} />
-      <text x="20" y="15" textAnchor="middle" fill="#FEF3C7" fontSize="7" fontWeight="bold" fontFamily="Arial,sans-serif">
-        {isMiner ? "⛏" : "Au"}
-      </text>
-      <text x="20" y="28" textAnchor="middle" fill="#FEF3C7" fontSize={symbol.length > 4 ? "6.5" : "8"} fontWeight="bold" fontFamily="Arial,sans-serif">
-        {symbol.replace("=F", "").replace(".JK", "")}
-      </text>
-    </svg>
+    <img
+      src={logoUrl}
+      onError={() => setErr(true)}
+      alt={symbol}
+      className="rounded-xl object-contain bg-white p-1 border border-border shrink-0"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -183,17 +192,25 @@ function LiveDot() {
 const TimeframeDropdown = ({
   value,
   onChange,
+  onOpenChange, // <--- 1. Terima prop ini
 }: {
   value: string;
   onChange: (v: string) => void;
+  onOpenChange?: (open: boolean) => void; // <--- 2. Definisikan tipe
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = TIMEFRAMES.find((t) => t.value === value);
 
+  // 3. Buat fungsi toggle tersentralisasi
+  const toggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    onOpenChange?.(isOpen); // Kirim sinyal agar BottomNav menghilang
+  };
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) toggle(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -208,7 +225,7 @@ const TimeframeDropdown = ({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => toggle(!open)}
         className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs sm:text-sm font-bold text-foreground focus:outline-none hover:bg-secondary/40 transition cursor-pointer select-none min-w-[70px] justify-between"
       >
         <span className="text-amber-500">{selected?.label ?? value}</span>
@@ -223,18 +240,29 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
-              onClick={() => setOpen(false)}
+              onClick={() => toggle(false)}
             />
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 30 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="fixed inset-x-0 bottom-0 z-[70] p-4 sm:p-2 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-xl sm:absolute sm:inset-auto sm:right-0 sm:mt-1.5 sm:w-60 pb-8 sm:pb-2"
-            >
-              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden" />
 
-              <div className="mb-2">
+            <motion.div
+              initial={{ opacity: 0, y: "100%" }} // 4. Ubah jadi 100% untuk efek slide dari bawah layar
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              // 5. TAMBAHKAN GESTURE SWIPE/DRAG
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, { offset, velocity }) => {
+                if (offset.y > 80 || velocity.y > 300) toggle(false);
+              }}
+              // 6. Z-Index naik jadi 9999
+              className="fixed inset-x-0 bottom-0 z-[9999] p-4 sm:p-2 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-xl sm:absolute sm:inset-auto sm:right-0 sm:mt-1.5 sm:w-60 pb-8 sm:pb-2"
+            >
+              {/* 7. Grabber Handle untuk visual ditarik */}
+              <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden cursor-grab active:cursor-grabbing" />
+
+              {/* 8. Tambahkan pb-16 dan max-h agar lega saat discroll */}
+              <div className="mb-2 max-h-[60vh] overflow-y-auto pb-16 scrollbar-thin">
                 <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 sm:mb-1">
                   Pilih Rentang Waktu
                 </div>
@@ -244,10 +272,10 @@ const TimeframeDropdown = ({
                     return (
                       <button
                         key={item.value}
-                        onClick={() => { onChange(item.value); setOpen(false); }}
+                        onClick={() => { onChange(item.value); toggle(false); }}
                         className={`rounded-lg sm:rounded-md py-2.5 sm:py-1.5 text-xs font-semibold transition cursor-pointer select-none text-center ${isActive
-                            ? "bg-amber-500 text-white shadow-md sm:shadow-sm shadow-amber-500/30"
-                            : "text-foreground bg-secondary/30 sm:bg-transparent hover:bg-secondary"
+                          ? "bg-amber-500 text-white shadow-md sm:shadow-sm shadow-amber-500/30"
+                          : "text-foreground bg-secondary/30 sm:bg-transparent hover:bg-secondary"
                           }`}
                       >
                         {item.label}
@@ -309,7 +337,7 @@ function GoldTickerBar({
   }, [selected]);
 
   return (
-    <div className="relative select-none">
+    <div className="relative select-none ">
       <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 md:w-12 z-10 bg-gradient-to-r from-card to-transparent rounded-l-2xl" />
       <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 md:w-12 z-10 bg-gradient-to-l from-card to-transparent rounded-r-2xl" />
 
@@ -343,9 +371,9 @@ function GoldTickerBar({
                       key={inst.symbol}
                       data-sym={inst.symbol}
                       onClick={() => onSelect(inst.symbol)}
-                      className={`group shrink-0 flex flex-col justify-center gap-1 px-3 md:px-4 w-[120px] md:w-[140px] border-b-[2.5px] transition-all duration-150 border-r border-border/20 ${isSelected
-                          ? "border-b-amber-400 bg-amber-500/[0.07]"
-                          : "border-b-transparent hover:border-b-amber-400/50 hover:bg-amber-500/[0.04]"
+                      className={`group shrink-0 flex flex-col justify-center gap-1 px-3 md:px-4 w-[120px] md:w-[140px] transition-all duration-150 border-r border-border/20 last:border-r-0 first:rounded-l-xl last:rounded-r-xl ${isSelected
+                        ? "border-b-amber-400 bg-amber-500/[0.07]"
+                        : "border-b-transparent hover:border-b-amber-400/50 hover:bg-amber-500/[0.04]"
                         }`}
                       style={{ height: "64px" }}
                     >
@@ -394,7 +422,7 @@ function GoldTickerBar({
 // Main GoldPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function GoldPanel() {
+export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const { theme } = useThemeAuth();
 
   const [selected, setSelected] = useState<string>("GC=F");
@@ -675,7 +703,9 @@ export default function GoldPanel() {
               <span className="text-xs md:text-sm font-bold text-foreground truncate max-w-[100px] sm:max-w-[200px]">{instrument.label}</span>
             </div>
 
-            <TimeframeDropdown value={chartInterval} onChange={setChartInterval} />
+            <TimeframeDropdown value={chartInterval}
+              onChange={setChartInterval}
+              onOpenChange={onOpenChange} />
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end mt-1 sm:mt-0">

@@ -14,10 +14,11 @@ interface BottomNavProps {
     activeTab: string;
     setActiveTab: (tab: any) => void;
     onProfileClick: () => void; // Prop diganti namanya agar lebih relevan
-
+    isVisible?: boolean;
 }
 
-export default function BottomNav({ activeTab, setActiveTab, onProfileClick }: BottomNavProps) {
+export default function BottomNav({ activeTab, setActiveTab, onProfileClick, isVisible = true }: BottomNavProps) {
+    if (!isVisible) return null;
     const navItems = [
         { id: "overview", label: "Overview", icon: LayoutDashboard },
         { id: "crypto", label: "Crypto", icon: Bitcoin },

@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import Sidebar, { DashboardTab } from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 
 // Dashboard panels
-// import CashFlowCard from "@/components/CashFlowCard";
-// import BudgetBreakdownCard from "@/components/BudgetBreakdownCard";
 import ReferralCard from "@/components/ReferralCard";
 import SpendingCard from "@/components/SpendingCard";
 import PortfolioCard from "@/components/PortfolioCard";
@@ -21,6 +19,7 @@ import TechnicalsGauge, { KlineBasic } from "@/components/TechnicalsGauge";
 import PortfolioWatchlistPanel from "@/components/PortfolioWatchlistPanel";
 import GoldPanel from "@/components/GoldPanel";
 import MarketScreener from "@/components/MarketScreener";
+import StockMarketScreener from "@/components/StockMarketScreener";
 import EconomicCalendar from "@/components/EconomicCalendar";
 import BottomNav from "@/components/BottomNav";
 import ProfilePanel from "@/components/ProfilePanel";
@@ -58,7 +57,6 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
           const res = await fetch(`/api/crypto/klines?symbol=${symbol}&interval=1d&limit=200`);
           if (!res.ok) throw new Error("HTTP " + res.status);
           const data: any[] = await res.json();
-          // Binance format: [[openTime, open, high, low, close, volume, ...], ...]
           const klineArr: KlineBasic[] = data.map((k: any) => ({
             time: Math.floor(Number(Array.isArray(k) ? k[0] : k.time) / 1000),
             open: parseFloat(Array.isArray(k) ? k[1] : k.open),
@@ -127,16 +125,37 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading } = useThemeAuth();
+
+  // State untuk mengontrol visibilitas BottomNav
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
-  // Market Terminal Toggle State — shared between terminal and technicals
+  // Referensi untuk auto-scroll ke atas
+  const mainScrollRef = useRef<HTMLElement>(null);
+
+  // Market Terminal Toggle State
   const [marketType, setMarketType] = useState<"crypto" | "stocks">("crypto");
 
-  // Mount effect to avoid hydration errors with Recharts & Lightweight Charts
   useEffect(() => { setIsMounted(true); }, []);
+
+  // Efek untuk reset scroll ke atas saat ganti tab
+  useEffect(() => {
+    const resetScroll = () => {
+      if (mainScrollRef.current) {
+        mainScrollRef.current.scrollTop = 0;
+      }
+      window.scrollTo({ top: 0, behavior: "instant" });
+    };
+
+    // Reset langsung saat klik tab (agar animasi transition dimulai dari atas)
+    resetScroll();
+
+    // Reset kembali setelah transition selesai (300ms) dan tab baru termuat
+    const timer = setTimeout(resetScroll, 350);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
 
   if (isLoading) {
     return (
@@ -174,10 +193,8 @@ export default function DashboardPage() {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-1 gap-6 lg:grid-cols-3"
           >
-            {/* LEFT COLUMN: Net Worth, Markets Terminal, Cashflow, Budget, Technicals */}
+            {/* LEFT COLUMN */}
             <div className="space-y-6 lg:col-span-2">
-              {/* <NetWorthCard isMounted={isMounted} /> */}
-
               {/* TRADING TERMINAL WIDGET */}
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
@@ -191,19 +208,16 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Crypto / Stock Selector Tab Group */}
                   <div className="flex rounded-lg border border-border bg-background p-1 text-xs font-bold">
                     <button
                       onClick={() => setMarketType("crypto")}
-                      className={`rounded-md px-4 py-1.5 transition select-none cursor-pointer ${marketType === "crypto" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"
-                        }`}
+                      className={`rounded-md px-4 py-1.5 transition select-none cursor-pointer ${marketType === "crypto" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       Kripto (Crypto)
                     </button>
                     <button
                       onClick={() => setMarketType("stocks")}
-                      className={`rounded-md px-4 py-1.5 transition select-none cursor-pointer ${marketType === "stocks" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"
-                        }`}
+                      className={`rounded-md px-4 py-1.5 transition select-none cursor-pointer ${marketType === "stocks" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       Saham (IDX)
                     </button>
@@ -218,72 +232,61 @@ export default function DashboardPage() {
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
                   >
-                    {marketType === "crypto" ? <CryptoPanel /> : <StocksPanel />}
+                    {/* PASTIKAN onOpenChange ADA DI SINI */}
+                    {marketType === "crypto" ? (
+                      <CryptoPanel onOpenChange={setIsPopupOpen} />
+                    ) : (
+                      <StocksPanel onOpenChange={setIsPopupOpen} />
+                    )}
                   </motion.div>
                 </AnimatePresence>
               </div>
 
-              {/* Cash Flow vs Budget Grid */}
-              {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <CashFlowCard isMounted={isMounted} />
-                <BudgetBreakdownCard isMounted={isMounted} />
-              </div> */}
-
-              {/* ── TECHNICALS GAUGE — below investment portfolio area ── */}
+              {/* TECHNICALS GAUGE */}
               {isMounted && <TechnicalsSection marketType={marketType} />}
             </div>
 
-            {/* RIGHT COLUMN: News feed & Personal Wealth stats */}
+            {/* RIGHT COLUMN */}
             <div className="space-y-6 flex flex-col lg:max-h-full">
-
-              {/* News feed */}
               <div className="bg-card rounded-2xl border border-border p-4 shadow-sm h-[550px] flex flex-col overflow-hidden">
                 <NewsPanel />
               </div>
-
-              {/* ── MARKET SCREENER (FITUR BARU) ── */}
-              {marketType === "crypto" && <MarketScreener />}
-              {/* ── ECONOMIC CALENDAR ── */}
+              {marketType === "crypto" ? <MarketScreener /> : <StockMarketScreener />}
               <EconomicCalendar />
-              {/* Checklist */}
-              {/* <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <div className="relative flex items-center justify-center h-12 w-12 rounded-full border-4 border-brand-green/20">
-                    <div className="absolute inset-0 rounded-full border-4 border-brand-green border-r-transparent border-b-transparent animate-spin-slow" />
-                    <span className="text-xs font-bold text-foreground">1/6</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Get your money's worth</h4>
-                    <p className="mt-0.5 text-xs text-foreground font-semibold">Selesaikan pembuatan profil FinPulse</p>
-                  </div>
-                  <ChevronRight className="h-4.5 w-4.5 text-muted-foreground self-center" />
-                </div>
-              </div> */}
-              {/* <SpendingCard isMounted={isMounted} /> */}
-              {/* <PortfolioCard isMounted={isMounted} /> */}
-              {/* <ReferralCard /> */}
             </div>
           </motion.div>
         );
 
       case "crypto":
         return (
-          <motion.div key="crypto" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
-            <CryptoPanel />
+          <motion.div key="crypto"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3 }}>
+            <CryptoPanel onOpenChange={setIsPopupOpen} />
           </motion.div>
         );
 
       case "stocks":
         return (
-          <motion.div key="stocks" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
-            <StocksPanel />
+          <motion.div key="stocks"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3 }}>
+            <StocksPanel onOpenChange={setIsPopupOpen} />
           </motion.div>
         );
 
       case "gold":
         return (
-          <motion.div key="gold" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
-            <GoldPanel />
+          <motion.div key="gold"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3 }}>
+            <GoldPanel onOpenChange={setIsPopupOpen} />
           </motion.div>
         );
 
@@ -343,22 +346,26 @@ export default function DashboardPage() {
 
       {/* Main Container */}
       <div className="flex flex-1 flex-col overflow-hidden transition-all duration-300 lg:ml-64 w-full">
-
         {/* Topbar navigation */}
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16 pb-24 lg:pb-6">
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16 pb-24 lg:pb-6">
           <AnimatePresence mode="wait">
             {renderPanelContent()}
           </AnimatePresence>
         </main>
       </div>
+
       {/* ── BOTTOM NAVIGATION (KHUSUS MOBILE) ── */}
+      {/* PERBAIKAN UTAMA: Tambahkan isVisible={!isPopupOpen} agar 
+        BottomNav bersembunyi saat menu timeframe/koin ditekan 
+      */}
       <BottomNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onProfileClick={() => setSidebarOpen(true)}
+        isVisible={!isPopupOpen}
       />
     </div>
   );
