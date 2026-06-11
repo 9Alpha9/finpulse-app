@@ -170,7 +170,7 @@ export default function MarketMarquee({ marketType }: { marketType: "crypto" | "
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-t-xl mb-4">
+    <div className="w-full overflow-hidden rounded-full mb-4">
       <AnimatePresence mode="wait">
         <motion.div
           key={marketType}

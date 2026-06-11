@@ -26,6 +26,7 @@ import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from
 import { motion, AnimatePresence } from "framer-motion";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
 import PaperTrading from "./PaperTrading";
+import MarketMarquee from "./MarketMarquee";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Live Price Component untuk Modal
@@ -279,9 +280,9 @@ const TimeframeDropdown = ({
 
             {/* Panel Pilihan Waktu (DENGAN DRAG TO CLOSE) */}
             <motion.div
-              initial={{ opacity: 0, y: "100%" }}
+              initial={{ opacity: 0, y: "10%" }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: "200%" }}
+              exit={{ opacity: 0, y: "10%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               // ── FITUR SWIPE TO CLOSE (DRAG) ──
               drag="y"
@@ -351,7 +352,7 @@ const TimeframeDropdown = ({
 // CryptoPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function CryptoPanel({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+export default function CryptoPanel({ onOpenChange, hideMarquee }: { onOpenChange?: (open: boolean) => void; hideMarquee?: boolean }) {
   const { subscriptionTier, setSubscriptionTier, theme } = useThemeAuth();
   const isPremium = subscriptionTier === "premium";
 
@@ -732,6 +733,12 @@ export default function CryptoPanel({ onOpenChange }: { onOpenChange?: (open: bo
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-amber-500 text-xs">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="leading-normal">{errorBanner}</p>
+        </div>
+      )}
+
+      {!hideMarquee && (
+        <div className="w-full overflow-hidden rounded-t-xl mb-4">
+          <MarketMarquee marketType="crypto" />
         </div>
       )}
 

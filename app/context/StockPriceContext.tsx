@@ -16,19 +16,19 @@ import type { StockQuote } from "@/app/api/stocks/bulk/route";
 
 // ─── Fallback sementara ───────────────────────────────────────────────────────
 const FALLBACK_QUOTES: Record<string, StockQuote> = {
-  IHSG:  { price: 5886.51, change: -139.86, changePercent: -2.32, prevClose: 6026.37 },
-  BBCA:  { price: 9875,    change: 0,        changePercent: 0,     prevClose: 9875 },
-  BBRI:  { price: 4560,    change: 0,        changePercent: 0,     prevClose: 4560 },
-  BMRI:  { price: 5800,    change: 0,        changePercent: 0,     prevClose: 5800 },
-  TLKM:  { price: 3600,    change: 0,        changePercent: 0,     prevClose: 3600 },
-  ASII:  { price: 4900,    change: 0,        changePercent: 0,     prevClose: 4900 },
-  GOTO:  { price: 62,      change: 0,        changePercent: 0,     prevClose: 62   },
-  BBNI:  { price: 4750,    change: 0,        changePercent: 0,     prevClose: 4750 },
-  KLBF:  { price: 1600,    change: 0,        changePercent: 0,     prevClose: 1600 },
+  IHSG: { price: 5886.51, change: -139.86, changePercent: -2.32, prevClose: 6026.37 },
+  BBCA: { price: 9875, change: 0, changePercent: 0, prevClose: 9875 },
+  BBRI: { price: 4560, change: 0, changePercent: 0, prevClose: 4560 },
+  BMRI: { price: 5800, change: 0, changePercent: 0, prevClose: 5800 },
+  TLKM: { price: 3600, change: 0, changePercent: 0, prevClose: 3600 },
+  ASII: { price: 4900, change: 0, changePercent: 0, prevClose: 4900 },
+  GOTO: { price: 62, change: 0, changePercent: 0, prevClose: 62 },
+  BBNI: { price: 4750, change: 0, changePercent: 0, prevClose: 4750 },
+  KLBF: { price: 1600, change: 0, changePercent: 0, prevClose: 1600 },
 };
 
-const POLL_MS = 15_000; // ambil harga real setiap 15 detik
-const TICK_MS = 500;    // micro-movement setiap 500ms
+const POLL_MS = 5_000; // ambil harga real setiap 15 detik
+const TICK_MS = 200;    // micro-movement setiap 500ms
 
 type QuoteMap = Record<string, StockQuote>;
 

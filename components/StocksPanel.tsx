@@ -28,6 +28,7 @@ import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import { useStockPrices } from "@/app/context/StockPriceContext";
 import { PortfolioTracker, SignalConfigurator } from "@/components/PortfolioAndSignals";
 import PaperTrading from "./PaperTrading";
+import MarketMarquee from "./MarketMarquee";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IDX Stock Logo Component
@@ -337,7 +338,7 @@ const TimeframeDropdown = ({
 // StocksPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChange?: (open: boolean) => void; hideMarquee?: boolean }) {
   const { theme } = useThemeAuth();
   // ✅ Sumber harga + change real yang sama dengan MarketMarquee
   const { quotes: contextQuotes } = useStockPrices();
@@ -517,7 +518,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
       lastBarRef.current = lb;
     }
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextQuotes[selectedStock]?.price]);
 
   useEffect(() => {
@@ -621,6 +622,12 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-amber-500 text-xs">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="leading-normal">{errorBanner}</p>
+        </div>
+      )}
+
+      {!hideMarquee && (
+        <div className="w-full overflow-hidden rounded-t-xl mb-4">
+          <MarketMarquee marketType="stocks" />
         </div>
       )}
 
@@ -778,7 +785,7 @@ export default function StocksPanel({ onOpenChange }: { onOpenChange?: (open: bo
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <LiveStockPrice symbol={sym} basePrice={allPrices[sym]} mainPrice={isSelected ? stock?.price : undefined} />
+                                    <LiveStockPrice symbol={sym} basePrice={contextQuotes[sym]?.price} mainPrice={isSelected ? stock?.price : undefined} />
                                     {isSelected ? (
                                       <Check className="h-3.5 w-3.5 text-brand-green shrink-0" />
                                     ) : (
