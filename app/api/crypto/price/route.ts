@@ -1,13 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-
-/**
- * GET /api/crypto/price?symbol=BTCUSDT
- * GET /api/crypto/price           (semua pair, tanpa symbol)
- *
- * Proxy server-side ke data-api.binance.vision
- * (dapat diakses dari server Indonesia, tidak butuh VPN)
- */
-
 const BINANCE_BASE = "https://data-api.binance.vision";
 
 export async function GET(req: NextRequest) {
