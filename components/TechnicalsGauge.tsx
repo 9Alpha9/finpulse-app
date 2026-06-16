@@ -13,6 +13,7 @@ export interface KlineBasic {
   high:  number;
   low:   number;
   close: number;
+  volume: number;
 }
 
 type Signal = "Strong Buy" | "Buy" | "Neutral" | "Sell" | "Strong Sell";
@@ -119,8 +120,8 @@ function calcBollingerBands(closes: number[], period = 20, stdDev = 2): { percen
 
 function calcVolumeTrend(klines: KlineBasic[]): number {
   if (klines.length < 10) return 0;
-  const recent    = klines.slice(-5).map((k) => k.high - k.low);
-  const prev      = klines.slice(-10, -5).map((k) => k.high - k.low);
+  const recent    = klines.slice(-5).map((k) => k.volume);
+  const prev      = klines.slice(-10, -5).map((k) => k.volume);
   const avgRecent = recent.reduce((a, b) => a + b, 0) / 5;
   const avgPrev   = prev.reduce((a, b) => a + b, 0) / 5;
   return avgPrev === 0 ? 0 : (avgRecent - avgPrev) / avgPrev;

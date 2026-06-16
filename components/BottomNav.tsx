@@ -42,7 +42,7 @@ export default function BottomNav({ activeTab, setActiveTab, onProfileClick, isV
                         <button
                             key={item.id}
                             onClick={() => setActiveTab(item.id)}
-                            className="relative flex flex-col items-center justify-center w-full py-1 gap-1 cursor-pointer select-none"
+                            className="relative flex flex-col items-center justify-center w-full py-1 gap-1 cursor-pointer select-none touch-manipulation active:scale-95 transition-transform"
                         >
                             {isActive && (
                                 <motion.div
@@ -69,7 +69,7 @@ export default function BottomNav({ activeTab, setActiveTab, onProfileClick, isV
                 {/* Tombol Profil — SEKARANG PINDAH TAB */}
                 <button
                     onClick={() => setActiveTab("profile")} // <--- Ganti jadi ini
-                    className="relative flex flex-col items-center justify-center w-full py-1 gap-1 cursor-pointer select-none"
+                    className="relative flex flex-col items-center justify-center w-full py-1 gap-1 cursor-pointer select-none touch-manipulation active:scale-95 transition-transform"
                 >
                     {activeTab === "profile" && (
                         <motion.div

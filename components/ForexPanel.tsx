@@ -15,10 +15,10 @@ const formatTimestampUTC = (ts: number): string => {
 };
 
 const getThemeColors = (isDark: boolean) => ({
-  backgroundColor: isDark ? "#111827" : "#ffffff",
-  textColor: isDark ? "#94a3b8" : "#374151",
-  gridColor: isDark ? "#1f2937" : "#f3f4f6",
-  borderColor: isDark ? "#374151" : "#e5e7eb",
+  backgroundColor: "transparent",
+  textColor: isDark ? "#a1a1aa" : "#52525b",
+  gridColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
 });
 
 export default function ForexPanel() {
@@ -26,7 +26,7 @@ export default function ForexPanel() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
-  const resizeHandlerRef = useRef<(() => void) | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,10 +130,11 @@ export default function ForexPanel() {
       }
 
       const handleResize = () => {
-        chartRef.current?.resize(container.clientWidth, container.clientHeight);
+        if (container) chartRef.current?.resize(container.clientWidth, container.clientHeight);
       };
-      resizeHandlerRef.current = handleResize;
-      window.addEventListener("resize", handleResize);
+      const observer = new ResizeObserver(handleResize);
+      observer.observe(container);
+      resizeObserverRef.current = observer;
     } else {
       chartRef.current.applyOptions(chartOptions);
       if (seriesRef.current) {
@@ -149,8 +150,8 @@ export default function ForexPanel() {
 
   useEffect(() => {
     return () => {
-      if (resizeHandlerRef.current) {
-        window.removeEventListener("resize", resizeHandlerRef.current);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
       }
       if (chartRef.current) {
         chartRef.current.remove();
@@ -167,8 +168,8 @@ export default function ForexPanel() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500">
-            <DollarSign className="h-5 w-5" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+            <DollarSign className="h-5 w-5 drop-shadow-md" />
           </div>
           <div>
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground flex items-center gap-2">

@@ -236,8 +236,8 @@ export default function NewsPanel() {
         {/* Title row */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
-              <Globe className="h-4.5 w-4.5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 text-white shadow-[0_4px_10px_rgba(59,130,246,0.3)] border border-white/20 shrink-0">
+              <Globe className="h-5 w-5 drop-shadow-md" />
             </div>
             <div>
               <h2 className="text-base font-extrabold text-foreground tracking-tight leading-tight">

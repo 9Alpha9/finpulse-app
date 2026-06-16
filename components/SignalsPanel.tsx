@@ -99,8 +99,10 @@ export default function SignalsPanel() {
 
       {/* Main Signal Form */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm relative overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border pb-4 mb-6">
-          <Bell className="h-5 w-5 text-brand-green" />
+        <div className="flex items-center gap-3 border-b border-border pb-4 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+            <Bell className="h-5 w-5 drop-shadow-md" />
+          </div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Konfigurasi Parameter WhatsApp Signal</h3>
         </div>
 

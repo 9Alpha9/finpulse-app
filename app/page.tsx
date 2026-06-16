@@ -15,6 +15,8 @@ import CryptoPanel from "@/components/CryptoPanel";
 import StocksPanel from "@/components/StocksPanel";
 import SignalsPanel from "@/components/SignalsPanel";
 import NewsPanel from "@/components/NewsPanel";
+import BentoNewsGrid from "@/components/BentoNewsGrid";
+import GlobalAlert from "@/components/GlobalAlert";
 import TechnicalsGauge, { KlineBasic } from "@/components/TechnicalsGauge";
 import PortfolioWatchlistPanel from "@/components/PortfolioWatchlistPanel";
 import GoldPanel from "@/components/GoldPanel";
@@ -25,13 +27,18 @@ import BottomNav from "@/components/BottomNav";
 import ProfilePanel from "@/components/ProfilePanel";
 import MarketMarquee from "@/components/MarketMarquee";
 import ForexPanel from "@/components/ForexPanel";
+import DeepAnalystCard from "@/components/premium/ai-analyst/DeepAnalystCard";
+import AdvancedChart from "@/components/premium/charts/AdvancedChart";
+import AlertForm from "@/components/premium/smart-alerts/AlertForm";
+import AlertDashboard from "@/components/premium/smart-alerts/AlertDashboard";
 
 import {
   ChevronRight,
   Loader2,
   TrendingUp,
   Activity,
-  User
+  User,
+  Crown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -39,15 +46,9 @@ import { motion, AnimatePresence } from "framer-motion";
 // Technicals section: fetches klines for active symbol and renders gauge
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) {
+function TechnicalsSection({ marketType, symbol }: { marketType: "crypto" | "stocks"; symbol: string }) {
   const [klines, setKlines] = useState<KlineBasic[]>([]);
-  const [symbol, setSymbol] = useState(marketType === "crypto" ? "BTCUSDT" : "IHSG");
   const [loading, setLoading] = useState(false);
-
-  // Sync symbol default when marketType changes
-  useEffect(() => {
-    setSymbol(marketType === "crypto" ? "BTCUSDT" : "IHSG");
-  }, [marketType]);
 
   // Fetch klines for the active symbol
   useEffect(() => {
@@ -60,7 +61,7 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
       setLoading(true);
       try {
         if (marketType === "crypto") {
-          const res = await fetch(`/api/crypto/klines?symbol=${symbol}&interval=1d&limit=200`);
+          const res = await fetch(`/api/crypto/klines?symbol=${symbol}&interval=1d&limit=500`);
           if (!res.ok) throw new Error("HTTP " + res.status);
           const data: any[] = await res.json();
           const klineArr: KlineBasic[] = data.map((k: any) => ({
@@ -69,6 +70,7 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
             high: parseFloat(Array.isArray(k) ? k[2] : k.high),
             low: parseFloat(Array.isArray(k) ? k[3] : k.low),
             close: parseFloat(Array.isArray(k) ? k[4] : k.close),
+            volume: parseFloat(Array.isArray(k) ? k[5] : k.volume || k.vol || 0),
           }));
           if (active) setKlines(klineArr);
         } else {
@@ -89,8 +91,14 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
         if (active) setLoading(false);
       }
     }
+
     fetchKlines();
-    return () => { active = false; };
+    const intervalId = setInterval(fetchKlines, 15000); // Realtime fetch every 15s
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
   }, [symbol, marketType]);
 
   const symbolDisplay = symbol.replace("USDT", "");
@@ -99,8 +107,8 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 text-purple-500">
-            <Activity className="h-4 w-4" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 text-white shadow-[0_4px_10px_rgba(168,85,247,0.3)] border border-white/20 shrink-0">
+            <Activity className="h-5 w-5 drop-shadow-md" />
           </div>
           <div>
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">
@@ -117,7 +125,7 @@ function TechnicalsSection({ marketType }: { marketType: "crypto" | "stocks" }) 
         </div>
       </div>
 
-      {loading ? (
+      {loading && klines.length === 0 ? (
         <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground text-xs">
           <Loader2 className="h-5 w-5 animate-spin text-brand-green" />
           Menghitung indikator teknikal...
@@ -142,12 +150,15 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const { subscriptionTier, setSubscriptionTier } = useThemeAuth();
 
   // Referensi untuk auto-scroll ke atas
   const mainScrollRef = useRef<HTMLElement>(null);
 
   // Market Terminal Toggle State
   const [marketType, setMarketType] = useState<"crypto" | "stocks">("crypto");
+  const [activeCryptoSymbol, setActiveCryptoSymbol] = useState("BTCUSDT");
+  const [activeStockSymbol, setActiveStockSymbol] = useState("IHSG");
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -183,8 +194,8 @@ export default function DashboardPage() {
         return (
           <motion.div key="profile" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
             <div className="flex items-center gap-3 mb-6 px-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-green/15 text-brand-green">
-                <User className="h-5 w-5" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+                <User className="h-5 w-5 drop-shadow-md" />
               </div>
               <div>
                 <h1 className="text-xl font-black text-foreground tracking-tight uppercase">Pengaturan Profil</h1>
@@ -202,18 +213,19 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+            className="grid grid-cols-1 gap-6 xl:grid-cols-3"
           >
             {/* LEFT COLUMN */}
-            <div className="space-y-6 lg:col-span-2">
+            <div className="space-y-6 xl:col-span-2">
+
               <MarketMarquee marketType={marketType} />
 
               {/* TRADING TERMINAL WIDGET */}
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green/15 text-brand-green">
-                      <TrendingUp className="h-4.5 w-4.5" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+                      <TrendingUp className="h-5 w-5 drop-shadow-md" />
                     </div>
                     <div>
                       <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Terminal Transaksi FinPulse</h3>
@@ -247,20 +259,32 @@ export default function DashboardPage() {
                   >
                     {/* PASTIKAN onOpenChange ADA DI SINI */}
                     {marketType === "crypto" ? (
-                      <CryptoPanel onOpenChange={setIsPopupOpen} hideMarquee={true} />
+                      <CryptoPanel onOpenChange={setIsPopupOpen} hideMarquee={true} symbol={activeCryptoSymbol} onSymbolChange={setActiveCryptoSymbol} />
                     ) : (
-                      <StocksPanel onOpenChange={setIsPopupOpen} hideMarquee={true} />
+                      <StocksPanel onOpenChange={setIsPopupOpen} hideMarquee={true} symbol={activeStockSymbol} onSymbolChange={setActiveStockSymbol} />
                     )}
                   </motion.div>
                 </AnimatePresence>
               </div>
 
               {/* TECHNICALS GAUGE */}
-              {isMounted && <TechnicalsSection marketType={marketType} />}
+              {isMounted && <TechnicalsSection marketType={marketType} symbol={marketType === "crypto" ? activeCryptoSymbol : activeStockSymbol} />}
+
+              {/* PREMIUM ANALYST AND CHART */}
+              {isMounted && (
+                <>
+                  <DeepAnalystCard userTier={subscriptionTier} ticker={marketType === "crypto" ? activeCryptoSymbol : activeStockSymbol} onUpgrade={() => setSubscriptionTier('premium')} />
+                </>
+              )}
             </div>
 
             {/* RIGHT COLUMN */}
-            <div className="space-y-6 flex flex-col lg:max-h-full">
+            <div className="space-y-6 flex flex-col xl:max-h-full">
+              {/* SMART ALERTS (PREMIUM FEATURE) */}
+              <AlertForm />
+              <AlertDashboard userTier={subscriptionTier} />
+              <AdvancedChart ticker={marketType === "crypto" ? activeCryptoSymbol : activeStockSymbol} marketType={marketType} />
+
               <ForexPanel />
               <div className="bg-card rounded-2xl border border-border p-4 shadow-sm h-[550px] flex flex-col overflow-hidden">
                 <NewsPanel />
@@ -278,7 +302,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}>
-            <CryptoPanel onOpenChange={setIsPopupOpen} />
+            <CryptoPanel onOpenChange={setIsPopupOpen} symbol={activeCryptoSymbol} onSymbolChange={setActiveCryptoSymbol} />
           </motion.div>
         );
 
@@ -289,7 +313,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}>
-            <StocksPanel onOpenChange={setIsPopupOpen} />
+            <StocksPanel onOpenChange={setIsPopupOpen} symbol={activeStockSymbol} onSymbolChange={setActiveStockSymbol} />
           </motion.div>
         );
 
@@ -309,8 +333,8 @@ export default function DashboardPage() {
           <motion.div key="portfolio" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.3 }}>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-green/15 text-brand-green">
-                  <TrendingUp className="h-5 w-5" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+                  <TrendingUp className="h-5 w-5 drop-shadow-md" />
                 </div>
                 <div>
                   <h1 className="text-lg font-extrabold text-foreground">Portfolio & Watchlist</h1>
@@ -337,9 +361,9 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}
-            className="max-w-4xl mx-auto h-[750px] flex flex-col"
+            className="mx-auto flex flex-col"
           >
-            <NewsPanel />
+            <BentoNewsGrid />
           </motion.div>
         );
 
@@ -364,7 +388,8 @@ export default function DashboardPage() {
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Dashboard Content */}
-        <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16 pb-24 lg:pb-6">
+        <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 mt-16 pb-24 lg:pb-6 relative">
+          <GlobalAlert />
           <AnimatePresence mode="wait">
             {renderPanelContent()}
           </AnimatePresence>

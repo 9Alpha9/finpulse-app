@@ -36,9 +36,9 @@ export default function MarketScreener() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
 
             {/* Header */}
-            <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/15 text-orange-500">
-                    <Flame className="h-4.5 w-4.5" />
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-[0_4px_10px_rgba(249,115,22,0.3)] border border-white/20 shrink-0">
+                    <Flame className="h-5 w-5 drop-shadow-md" />
                 </div>
                 <div>
                     <div className="flex items-center gap-2 justify-between w-full">

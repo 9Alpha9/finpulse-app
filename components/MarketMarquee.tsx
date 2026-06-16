@@ -112,14 +112,14 @@ export default function MarketMarquee({ marketType }: { marketType: "crypto" | "
 
   // ── Crypto Marquee ──────────────────────────────────────────────────────────
   const renderCryptoMarquee = () => {
-    const items = [...CRYPTO_PAIRS, ...CRYPTO_PAIRS, ...CRYPTO_PAIRS];
+    const items = Array(10).fill(CRYPTO_PAIRS).flat();
     return (
       <div className="flex w-full overflow-hidden bg-card border-b border-border py-2 relative select-none">
         <motion.div
           className="flex items-center whitespace-nowrap gap-10 pr-10"
-          animate={{ x: ["0%", "-33.333333%"] }}
-          transition={{ ease: "linear", duration: 32, repeat: Infinity }}
-          style={{ willChange: "transform" }}
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ ease: "linear", duration: 110, repeat: Infinity }}
+          style={{ willChange: "transform", width: "max-content" }}
         >
           {items.map((c, i) => (
             <div key={`cr-${c.symbol}-${i}`} className="flex items-center gap-1.5 shrink-0">
@@ -135,7 +135,7 @@ export default function MarketMarquee({ marketType }: { marketType: "crypto" | "
   // ── Stocks Marquee ──────────────────────────────────────────────────────────
   const renderStocksMarquee = () => {
     const ihsgPrice = stockPrices["IHSG"] ?? 5886.51;
-    const items = [...STOCK_TICKERS_SCROLL, ...STOCK_TICKERS_SCROLL, ...STOCK_TICKERS_SCROLL];
+    const items = Array(10).fill(STOCK_TICKERS_SCROLL).flat();
 
     return (
       <div className="flex w-full bg-card border-b border-border overflow-hidden relative select-none">
@@ -150,9 +150,9 @@ export default function MarketMarquee({ marketType }: { marketType: "crypto" | "
         <div className="flex flex-1 overflow-hidden">
           <motion.div
             className="flex items-center whitespace-nowrap gap-10 pl-4 pr-10 py-2"
-            animate={{ x: ["0%", "-33.333333%"] }}
-            transition={{ ease: "linear", duration: 30, repeat: Infinity }}
-            style={{ willChange: "transform" }}
+            animate={{ x: ["0%", "-50%"] }}
+            transition={{ ease: "linear", duration: 110, repeat: Infinity }}
+            style={{ willChange: "transform", width: "max-content" }}
           >
             {items.map((sym, i) => {
               const price = stockPrices[sym] ?? 1000;

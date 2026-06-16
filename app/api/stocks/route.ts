@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
     const highs = quote.high || [];
     const lows = quote.low || [];
     const closes = quote.close || [];
+    const volumes = quote.volume || [];
 
     const klines = [];
     for (let i = 0; i < timestamps.length; i++) {
@@ -118,6 +119,7 @@ export async function GET(req: NextRequest) {
           high: parseFloat(highs[i].toFixed(2)),
           low: parseFloat(lows[i].toFixed(2)),
           close: parseFloat(closes[i].toFixed(2)),
+          volume: volumes[i] || 0,
         });
       }
     }

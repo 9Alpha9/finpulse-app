@@ -12,6 +12,7 @@ import {
   History,
   Star,
   Search,
+  X,
 } from "lucide-react";
 import { saveWatchlistV2, loadWatchlistV2, WatchlistItem } from "@/components/PortfolioWatchlistPanel";
 import {
@@ -207,10 +208,10 @@ const formatTimestampUTC = (ts: number): string => {
 };
 
 const getThemeColors = (isDark: boolean) => ({
-  backgroundColor: isDark ? "#111827" : "#ffffff",
-  textColor: isDark ? "#94a3b8" : "#374151",
-  gridColor: isDark ? "#1f2937" : "#f3f4f6",
-  borderColor: isDark ? "#374151" : "#e5e7eb",
+  backgroundColor: "transparent",
+  textColor: isDark ? "#a1a1aa" : "#52525b",
+  gridColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,7 +264,6 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
-            // onClick dihilangkan sesuai permintaan
             />
 
             <motion.div
@@ -272,14 +272,6 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={0.2}
-              onDragEnd={(e, { offset, velocity }) => {
-                if (offset.y > 80 || velocity.y > 300) {
-                  toggle(false);
-                }
-              }}
               className="fixed inset-x-0 bottom-0 z-[9999] p-4 sm:p-3 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl sm:absolute sm:inset-auto sm:left-0 sm:mt-2 sm:w-[300px] pb-8 sm:pb-3"
             >
               <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden cursor-grab active:cursor-grabbing" />
@@ -292,9 +284,9 @@ const TimeframeDropdown = ({
                   <button
                     type="button"
                     onClick={() => toggle(false)}
-                    className="text-[10px] font-extrabold uppercase tracking-widest text-brand-green hover:underline cursor-pointer select-none"
+                    className="text-muted-foreground hover:text-foreground cursor-pointer transition p-1"
                   >
-                    Batal
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
 
@@ -338,12 +330,17 @@ const TimeframeDropdown = ({
 // StocksPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChange?: (open: boolean) => void; hideMarquee?: boolean }) {
+export default function StocksPanel({ onOpenChange, hideMarquee, symbol: extSymbol, onSymbolChange }: { onOpenChange?: (open: boolean) => void; hideMarquee?: boolean; symbol?: string; onSymbolChange?: (sym: string) => void }) {
   const { theme } = useThemeAuth();
   // ✅ Sumber harga + change real yang sama dengan MarketMarquee
   const { quotes: contextQuotes } = useStockPrices();
 
-  const [selectedStock, setSelectedStock] = useState<string>("IHSG");
+  const [internalSymbol, setInternalSymbol] = useState<string>("IHSG");
+  const selectedStock = extSymbol || internalSymbol;
+  const setSelectedStock = (sym: string) => {
+    setInternalSymbol(sym);
+    onSymbolChange?.(sym);
+  };
   const [isSelectOpen, setIsSelectOpen] = useState(false);
 
   const [isLoadingChart, setIsLoadingChart] = useState(true);
@@ -362,9 +359,9 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lastBarRef = useRef<StockKline | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const klineCache = useRef<Map<string, StockKline[]>>(new Map());
-  const resizeHandlerRef = useRef<(() => void) | null>(null);
 
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(
     () => typeof window !== "undefined" ? loadWatchlistV2() : []
@@ -377,7 +374,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
     return () => { document.body.style.overflow = "unset"; };
   }, [isSelectOpen, onOpenChange]);
 
-  // PERBAIKAN: Menambahkan logic reset "neutral" untuk warna kedip tick direction
   useEffect(() => {
     if (!stock) return;
     if (stock.price > prevPriceRef.current && prevPriceRef.current !== 0) {
@@ -485,7 +481,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
     return () => { active = false; };
   }, [selectedStock, interval]);
 
-  // ─ Sync harga + change dari context (SUMBER YANG SAMA DENGAN MARQUEE) ───────
   useEffect(() => {
     if (!stock) return;
     const q = contextQuotes[selectedStock];
@@ -499,7 +494,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
     prevPriceRef.current = ctxPrice;
     const t = setTimeout(() => setTickDirection("neutral"), 350);
 
-    // Gunakan change & changePercent REAL dari API, bukan kalkulasi ulang dari klines
     setStock(prev => prev ? {
       ...prev,
       price: ctxPrice,
@@ -507,7 +501,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
       changePercent: q.changePercent,
     } : prev);
 
-    // Update candle terakhir di chart
     if (interval === "1d" && candlestickSeriesRef.current && lastBarRef.current) {
       const lb = { ...lastBarRef.current };
       lb.close = ctxPrice;
@@ -518,7 +511,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
       lastBarRef.current = lb;
     }
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextQuotes[selectedStock]?.price]);
 
   useEffect(() => {
@@ -550,12 +542,11 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
     };
 
     if (!chartRef.current) {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-
-      if (width <= 0 || height <= 0) return;
-
-      const chart = createChart(container, { width, height, ...chartOptions });
+      const chart = createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        ...chartOptions
+      });
       const series = chart.addSeries(CandlestickSeries, {
         upColor: "#10b981",
         downColor: "#ef4444",
@@ -567,9 +558,14 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
       chartRef.current = chart;
       candlestickSeriesRef.current = series;
 
-      const handleResize = () => chartRef.current?.resize(container.clientWidth, container.clientHeight);
-      resizeHandlerRef.current = handleResize;
-      window.addEventListener("resize", handleResize);
+      const observer = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          chartRef.current?.applyOptions({ width, height });
+        }
+      });
+      observer.observe(container);
+      resizeObserverRef.current = observer;
     } else {
       chartRef.current.applyOptions(chartOptions);
     }
@@ -577,8 +573,8 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
 
   useEffect(() => {
     return () => {
-      if (resizeHandlerRef.current) {
-        window.removeEventListener("resize", resizeHandlerRef.current);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
       }
       if (chartRef.current) {
         chartRef.current.remove();
@@ -631,7 +627,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
         </div>
       )}
 
-      {/* Stock Header — Responsif Mobile */}
       {stock && (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 md:p-6 shadow-sm">
 
@@ -639,26 +634,22 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
             <IDXStockLogo symbol={selectedStock} size={48} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg md:text-xl font-bold text-foreground truncate max-w-full">
-                  {stock.name}
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground truncate max-w-full">
+                  {selectedStock}
                 </h2>
-                <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] sm:text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  IDX: {selectedStock}
+                <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Saham (IDX)
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{stock.sector}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate max-w-[280px] sm:max-w-md">
+                {stock.name}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-baseline justify-between md:justify-end w-full md:w-auto gap-4 md:gap-6 text-left md:text-right pt-2 md:pt-0">
+          <div className="flex items-baseline justify-between md:justify-end w-full md:w-auto gap-4 md:gap-8 text-left md:text-right pt-2 md:pt-0">
             <div>
-              <div className="flex items-center gap-1.5 md:justify-end text-[10px] sm:text-sm font-semibold text-muted-foreground mb-1">
-                Harga Terakhir
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-              </div>
+              <div className="text-xs sm:text-sm font-semibold text-muted-foreground mb-1">Harga Terakhir</div>
               <motion.h3
                 animate={{
                   color: tickDirection === "up" ? "#089981" : tickDirection === "down" ? "#f23645" : (theme === "dark" ? "#f8fafc" : "#0f172a"),
@@ -673,9 +664,9 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
             </div>
 
             <div className="text-right">
-              <div className="text-[10px] sm:text-sm font-semibold text-muted-foreground mb-1">Perubahan</div>
+              <div className="text-xs sm:text-sm font-semibold text-muted-foreground mb-1">Perubahan</div>
               <div
-                className={`flex items-center gap-0.5 text-xs sm:text-sm font-extrabold justify-end transition-colors ${stock.change >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}
+                className={`flex items-center gap-1 sm:gap-1.5 px-1 sm:px-2 py-0.5 sm:py-1 rounded-md mt-1 justify-end ${stock.change >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}
               >
                 {stock.change >= 0 ? <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ArrowDownRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                 <span>
@@ -724,14 +715,6 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: "100%" }}
                       transition={{ type: "spring", damping: 25, stiffness: 220 }}
-                      drag="y"
-                      dragConstraints={{ top: 0, bottom: 0 }}
-                      dragElastic={{ top: 0, bottom: 0.5 }}
-                      onDragEnd={(e, info) => {
-                        if (info.offset.y > 100 || info.velocity.y > 500) {
-                          setIsSelectOpen(false);
-                        }
-                      }}
                       className="bg-card w-full sm:w-[437px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-border shadow-2xl p-5 pb-8 sm:pb-5 flex flex-col max-h-[80vh] sm:max-h-[70vh] outline-none"
                     >
                       <div className="w-12 h-1.5 bg-secondary-foreground/20 rounded-full mx-auto mb-5 sm:hidden shrink-0 cursor-grab active:cursor-grabbing" />
@@ -743,9 +726,9 @@ export default function StocksPanel({ onOpenChange, hideMarquee }: { onOpenChang
                         <button
                           type="button"
                           onClick={() => setIsSelectOpen(false)}
-                          className="text-xs font-extrabold uppercase tracking-wider text-brand-green hover:underline cursor-pointer select-none"
+                          className="text-muted-foreground hover:text-foreground cursor-pointer transition p-1"
                         >
-                          Tutup
+                          <X className="h-5 w-5" />
                         </button>
                       </div>
 

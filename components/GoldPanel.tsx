@@ -10,6 +10,7 @@ import {
   History,
   Activity,
   ChevronDown,
+  X,
 } from "lucide-react";
 import { createChart, CandlestickSeries, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
 import { motion, AnimatePresence } from "framer-motion";
@@ -96,10 +97,10 @@ function fmtPrice(price: number, currency: "USD" | "IDR"): string {
 
 function getThemeColors(isDark: boolean) {
   return {
-    backgroundColor: isDark ? "#111827" : "#ffffff",
-    textColor: isDark ? "#94a3b8" : "#374151",
-    gridColor: isDark ? "#1f2937" : "#f3f4f6",
-    borderColor: isDark ? "#374151" : "#e5e7eb",
+    backgroundColor: "transparent",
+    textColor: isDark ? "#a1a1aa" : "#52525b",
+    gridColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+    borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
   };
 }
 
@@ -241,7 +242,6 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[60] bg-black/60 sm:hidden"
-              onClick={() => toggle(false)}
             />
 
             <motion.div
@@ -249,14 +249,6 @@ const TimeframeDropdown = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              // 5. TAMBAHKAN GESTURE SWIPE/DRAG
-              drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={0.2}
-              onDragEnd={(e, { offset, velocity }) => {
-                if (offset.y > 80 || velocity.y > 300) toggle(false);
-              }}
-              // 6. Z-Index naik jadi 9999
               className="fixed inset-x-0 bottom-0 z-[9999] p-4 sm:p-2 bg-card rounded-t-3xl sm:rounded-xl border-t sm:border border-border shadow-[0_-10px_40px_rgba(0,0,0,0.2)] sm:shadow-xl sm:absolute sm:inset-auto sm:right-0 sm:mt-1.5 sm:w-60 pb-8 sm:pb-2"
             >
               {/* 7. Grabber Handle untuk visual ditarik */}
@@ -438,7 +430,7 @@ export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: bool
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const resizeHandlerRef = useRef<(() => void) | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const klineCache = useRef<Map<string, Kline[]>>(new Map());
   const currentChartKey = useRef<string>("");
 
@@ -566,9 +558,12 @@ export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: bool
       candlestickSeriesRef.current = series;
 
       // 2. Resize dinamis (Menghindari Bleeding saat ukuran layar berubah)
-      const handleResize = () => chartRef.current?.resize(container.clientWidth, container.clientHeight);
-      resizeHandlerRef.current = handleResize;
-      window.addEventListener("resize", handleResize);
+      const handleResize = () => {
+        if (container) chartRef.current?.resize(container.clientWidth, container.clientHeight);
+      };
+      const observer = new ResizeObserver(handleResize);
+      observer.observe(container);
+      resizeObserverRef.current = observer;
 
       // 3. Sembunyikan Logo TradingView Watermark (Inject CSS)
       // const style = document.createElement("style");
@@ -582,7 +577,7 @@ export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: bool
 
   useEffect(() => {
     return () => {
-      if (resizeHandlerRef.current) window.removeEventListener("resize", resizeHandlerRef.current);
+      if (resizeObserverRef.current) resizeObserverRef.current.disconnect();
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -604,10 +599,10 @@ export default function GoldPanel({ onOpenChange }: { onOpenChange?: (open: bool
             </svg>
           </div>
           <div>
-            <h1 className="text-base md:text-lg font-extrabold text-foreground">Harga Emas Dunia</h1>
-            <p className="text-[10px] md:text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-              <LiveDot />
-              Realtime via Yahoo Finance
+            <h1 className="text-lg md:text-xl font-extrabold text-foreground">Harga Emas Dunia</h1>
+            <p className="text-xs md:text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+              <Activity className="h-3.5 w-3.5" />
+              <span>Analisis Komoditas Real-Time</span>
             </p>
           </div>
         </div>
