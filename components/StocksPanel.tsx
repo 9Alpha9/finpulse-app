@@ -82,6 +82,7 @@ function LiveStockPrice({ symbol, basePrice, mainPrice }: { symbol: string, base
   // Sync with basePrice dynamically once loaded from API
   useEffect(() => {
     if (basePrice && mainPrice === undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPrice(basePrice);
     }
   }, [basePrice, mainPrice]);
@@ -89,6 +90,7 @@ function LiveStockPrice({ symbol, basePrice, mainPrice }: { symbol: string, base
   // Sync with mainPrice if it is the selected stock
   useEffect(() => {
     if (mainPrice !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPrice(prev => {
         if (mainPrice > prev) setTickDirection("up");
         else if (mainPrice < prev) setTickDirection("down");
@@ -494,6 +496,7 @@ export default function StocksPanel({ onOpenChange, hideMarquee, symbol: extSymb
     prevPriceRef.current = ctxPrice;
     const t = setTimeout(() => setTickDirection("neutral"), 350);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStock(prev => prev ? {
       ...prev,
       price: ctxPrice,

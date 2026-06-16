@@ -3,14 +3,68 @@
 import React, { useState, useEffect } from "react";
 import { useThemeAuth } from "@/app/context/ThemeAuthContext";
 import { getLocalSignalSettings, saveLocalSignalSettings, SignalSettings } from "@/app/utils/supabase";
-import { Bell, ShieldAlert, CheckCircle, HelpCircle, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Bell, ShieldAlert, CheckCircle, HelpCircle, Loader2, Send, TrendingUp, Search } from "lucide-react";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+import { fetchCryptoPrice, fetchActiveCryptoPairs } from "@/src/lib/binance";
+import { fetchStockPriceFromYahoo, stockTickers } from "@/src/lib/stocks";
+import { GOLD_INSTRUMENTS } from "@/components/GoldPanel";
+
+type AssetType = "crypto" | "stock" | "gold";
+
+interface AssetOption {
+  id: string;
+  name: string;
+  type: AssetType;
+  short: string;
+}
+
+const IDX_ASSETS: AssetOption[] = Object.entries(stockTickers).map(([sym, info]) => ({
+  id: sym,
+  name: info.name,
+  type: "stock",
+  short: sym,
+}));
+
+const GOLD_ASSETS: AssetOption[] = GOLD_INSTRUMENTS.map((g) => ({
+  id: g.symbol,
+  name: g.label,
+  type: "gold",
+  short: g.symbol.replace("=F", "").replace(".JK", ""),
+}));
 
 export default function SignalsPanel() {
   const { subscriptionTier, setSubscriptionTier } = useThemeAuth();
   const isPremium = subscriptionTier === "premium";
 
-  const [selectedAsset, setSelectedAsset] = useState<"BTC" | "BBCA" | "WBSA">("BTC");
+  const [cryptoAssets, setCryptoAssets] = useState<AssetOption[]>([
+    { id: "BTCUSDT", name: "Bitcoin", type: "crypto", short: "BTC" }
+  ]);
+
+  useEffect(() => {
+    fetchActiveCryptoPairs()
+      .then(pairs => {
+        setCryptoAssets(pairs.map(p => ({
+          id: p,
+          name: p,
+          type: "crypto",
+          short: p.endsWith("USDT") ? p.replace("USDT", "") : p
+        })));
+      })
+      .catch(err => console.warn("Failed to fetch crypto pairs", err));
+  }, []);
+
+  const ALL_ASSETS = [...cryptoAssets, ...IDX_ASSETS, ...GOLD_ASSETS];
+
+  // Default selected asset
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("BTCUSDT");
+  const selectedAsset = ALL_ASSETS.find((a) => a.id === selectedAssetId || a.short === selectedAssetId) || ALL_ASSETS[0];
+
   const [whatsapp, setWhatsapp] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [stopLoss, setStopLoss] = useState("");
@@ -19,10 +73,16 @@ export default function SignalsPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  
+  // Realtime prices for modal
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [marketTab, setMarketTab] = useState<"crypto" | "stock" | "gold">("crypto");
 
-  // Load existing settings when selected asset changes
   useEffect(() => {
-    const settings = getLocalSignalSettings(selectedAsset);
+    const settings = getLocalSignalSettings(selectedAssetId);
     if (settings) {
       setWhatsapp(settings.whatsapp_number);
       setTakeProfit(settings.take_profit.toString());
@@ -36,7 +96,28 @@ export default function SignalsPanel() {
     }
     setSuccessMsg("");
     setErrorMsg("");
-  }, [selectedAsset]);
+    fetchPrice(selectedAsset);
+  }, [selectedAssetId, selectedAsset.id]);
+
+  const fetchPrice = async (asset: AssetOption) => {
+    setIsLoadingPrice(true);
+    try {
+      if (asset.type === "crypto") {
+        const price = await fetchCryptoPrice(asset.id);
+        setLivePrice(price);
+      } else {
+        // works for both idx stocks and gold (fetchStockPriceFromYahoo uses generic yahoo api)
+        let ticker = asset.id;
+        if (asset.type === "stock" && !ticker.endsWith(".JK")) ticker = `${ticker}.JK`;
+        const price = await fetchStockPriceFromYahoo(ticker);
+        setLivePrice(price);
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch price for ${asset.id}`, err);
+      setLivePrice(0);
+    }
+    setIsLoadingPrice(false);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,8 +134,8 @@ export default function SignalsPanel() {
       return;
     }
 
-    if (!whatsapp.startsWith("+") && !/^\d+$/.test(whatsapp)) {
-      setErrorMsg("Format nomor WhatsApp tidak valid. Gunakan format internasional (contoh: 62812345678).");
+    if (!whatsapp.startsWith("+") && !/^[\d\+]+$/.test(whatsapp)) {
+      setErrorMsg("Format nomor WhatsApp tidak valid. Gunakan format internasional (contoh: +62812345678).");
       return;
     }
 
@@ -64,161 +145,292 @@ export default function SignalsPanel() {
 
     const settings: SignalSettings = {
       whatsapp_number: whatsapp,
-      symbol: selectedAsset,
+      symbol: selectedAssetId,
       take_profit: takeProfit ? parseFloat(takeProfit) : 0,
       stop_loss: stopLoss ? parseFloat(stopLoss) : 0,
       dca_frequency: dca,
     };
 
-    saveLocalSignalSettings(selectedAsset, settings);
+    saveLocalSignalSettings(selectedAssetId, settings);
     setIsSaving(false);
-    setSuccessMsg(`Konfigurasi sinyal untuk ${selectedAsset} berhasil disimpan! Anda akan menerima notifikasi di ${whatsapp}.`);
+    setSuccessMsg(`Konfigurasi sinyal untuk ${selectedAsset.short} berhasil disimpan! Anda akan menerima notifikasi di ${whatsapp}.`);
   };
+
+  const handleTestSignal = () => {
+    if (!whatsapp) {
+      setErrorMsg("Isi nomor WhatsApp terlebih dahulu sebelum melakukan test.");
+      return;
+    }
+    const cleanNumber = whatsapp.replace('+', '');
+    const message = `*Alert FinPulse Test*\n\nSinyal aktif untuk aset: *${selectedAsset.short}*\nTarget TP: ${takeProfit || 'Tidak diset'}\nBatas SL: ${stopLoss || 'Tidak diset'}\nDCA: ${dca.toUpperCase()}\n\nJika ini adalah sinyal nyata, Anda akan mendapatkan notifikasi seperti ini secara otomatis.`;
+    const url = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  const formatCurrency = (val: number | null, type: AssetType) => {
+    if (val === null) return "Loading...";
+    if (type === "stock") {
+      return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(val);
+    }
+    // Gold and Crypto usually in USD
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(val);
+  };
+
+  const handleNumberKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (["e", "E", "+", "-"].includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const currentAssetsList = marketTab === "crypto" ? cryptoAssets : marketTab === "stock" ? IDX_ASSETS : GOLD_ASSETS;
+  const filteredAssets = currentAssetsList.filter(a => 
+    a.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.short.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
 
       {/* Premium Alert Indicator Banner */}
       {!isPremium && (
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 flex items-start gap-4 animate-in fade-in duration-200">
-          <ShieldAlert className="h-6 w-6 text-amber-500 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h4 className="text-sm font-bold text-foreground">Akses Premium Terkunci</h4>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              Anda saat ini terdaftar di paket **Free**. Sinyal otomatis melalui WhatsApp, Take Profit/Stop Loss real-time alerts, dan notifikasi DCA mingguan hanya tersedia untuk pengguna **Premium**.
-            </p>
-            <button
-              onClick={() => setSubscriptionTier("premium")}
-              className="mt-3.5 rounded-full bg-brand-green py-2 px-5 text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer"
-            >
-              Tingkatkan ke Premium Sekarang
-            </button>
-          </div>
-        </div>
+        <Alert variant="destructive" className="bg-amber-500/5 text-amber-500 border-amber-500/20">
+          <ShieldAlert className="h-4 w-4 !text-amber-500" />
+          <AlertTitle className="font-bold text-foreground">Akses Premium Terkunci</AlertTitle>
+          <AlertDescription className="text-muted-foreground mt-1">
+            Anda saat ini terdaftar di paket <strong>Free</strong>. Sinyal otomatis melalui WhatsApp, Take Profit/Stop Loss real-time alerts, dan notifikasi DCA mingguan hanya tersedia untuk pengguna <strong>Premium</strong>.
+            <div className="mt-3">
+              <button
+                onClick={() => setSubscriptionTier("premium")}
+                className="rounded-full bg-brand-green py-2 px-5 text-xs font-bold text-white shadow-md shadow-brand-green/20 hover:opacity-95 transition cursor-pointer"
+              >
+                Tingkatkan ke Premium Sekarang
+              </button>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Main Signal Form */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm relative overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-border pb-4 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
-            <Bell className="h-5 w-5 drop-shadow-md" />
+        <div className="flex items-center justify-between border-b border-border pb-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-green to-emerald-600 text-white shadow-[0_4px_10px_rgba(16,185,129,0.3)] border border-white/20 shrink-0">
+              <Bell className="h-5 w-5 drop-shadow-md" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Konfigurasi WhatsApp Signal</h3>
           </div>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Konfigurasi Parameter WhatsApp Signal</h3>
+          <button
+            type="button"
+            onClick={handleTestSignal}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-xs font-semibold hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Test Signal
+          </button>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-5">
+        <form onSubmit={handleSave} className="space-y-6">
 
           {/* Form Overlay in case of Free Tier */}
           {!isPremium && (
-            <div className="absolute inset-x-0 bottom-0 top-14 z-20 bg-card/60 backdrop-blur-2xs cursor-not-allowed select-none" />
+            <div className="absolute inset-x-0 bottom-0 top-20 z-20 bg-card/60 backdrop-blur-sm cursor-not-allowed select-none" />
           )}
 
-          {/* Select Asset */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Pilih Aset Investasi</label>
-            <select
-              value={selectedAsset}
-              onChange={(e) => setSelectedAsset(e.target.value as "BTC" | "BBCA" | "WBSA")}
-              className="block w-full rounded-lg border border-border bg-background py-2 px-3 text-sm focus:outline-none focus:border-brand-green"
+          {/* Asset Selection (Dialog Modal) */}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pilih Aset Investasi</Label>
+            <Dialog 
+              open={modalOpen} 
+              onOpenChange={(open) => {
+                setModalOpen(open);
+                if (open) setSearchQuery("");
+              }}
+              disablePointerDismissal={true} // Membuat modal statis
             >
-              <option value="BTC">Bitcoin (BTC)</option>
-              <option value="BBCA">Bank Central Asia (BBCA)</option>
-              <option value="WBSA">Wahana Buana Samudra (WBSA)</option>
-            </select>
+              <DialogTrigger
+                className="flex w-full items-center justify-between rounded-lg border border-border bg-background py-3 px-4 text-sm font-semibold hover:border-brand-green transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-brand-green" />
+                  {selectedAsset.name} ({selectedAsset.short})
+                </span>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {isLoadingPrice ? (
+                     <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <span className="font-mono font-bold text-foreground bg-secondary/50 px-2 py-1 rounded-md">
+                      {formatCurrency(livePrice, selectedAsset.type)}
+                    </span>
+                  )}
+                  <span className="bg-secondary px-2 py-1 rounded-md">Ubah Aset</span>
+                </div>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle>Pilih Aset Investasi</DialogTitle>
+                  <DialogDescription>
+                    Pilih instrumen kripto, saham, atau emas yang ingin dikonfigurasi sinyalnya.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {/* Tabs */}
+                <div className="flex rounded-lg border border-border bg-background p-1 text-xs font-bold mt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setMarketTab("crypto"); setSearchQuery(""); }}
+                    className={`flex-1 rounded-md py-1.5 transition cursor-pointer ${marketTab === "crypto" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Kripto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMarketTab("stock"); setSearchQuery(""); }}
+                    className={`flex-1 rounded-md py-1.5 transition cursor-pointer ${marketTab === "stock" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Saham
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMarketTab("gold"); setSearchQuery(""); }}
+                    className={`flex-1 rounded-md py-1.5 transition cursor-pointer ${marketTab === "gold" ? "bg-brand-green text-white" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Emas
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative mt-2">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari aset..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-background"
+                  />
+                </div>
+
+                {/* List */}
+                <div className="max-h-[300px] overflow-y-auto space-y-1 py-2 pr-1 scrollbar-thin">
+                  {filteredAssets.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-muted-foreground">Tidak ada aset ditemukan.</div>
+                  ) : (
+                    filteredAssets.map((asset) => (
+                      <button
+                        type="button"
+                        key={asset.id}
+                        onClick={() => {
+                          setSelectedAssetId(asset.id);
+                          setModalOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${selectedAssetId === asset.id || selectedAssetId === asset.short ? 'border-brand-green bg-brand-green/5' : 'border-border hover:border-muted-foreground/30 bg-background'}`}
+                      >
+                        <div className="text-left">
+                          <p className="font-bold text-foreground text-sm">{asset.short}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[200px]">{asset.name}</p>
+                        </div>
+                        {(selectedAssetId === asset.id || selectedAssetId === asset.short) && (
+                          <CheckCircle className="h-4 w-4 text-brand-green" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {/* WhatsApp Number */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Nomor WhatsApp Penerima</label>
-            <input
-              type="text"
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nomor WhatsApp Penerima</Label>
+            <Input
+              id="whatsapp"
+              type="tel"
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="Contoh: 628123456789 (gunakan kode negara)"
+              placeholder="Contoh: 6285174295981 (gunakan kode negara tanpa +)"
               disabled={!isPremium}
-              className="block w-full rounded-lg border border-border bg-background py-2 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-brand-green disabled:opacity-50"
+              className="bg-background"
             />
           </div>
 
           {/* Risk Alert Parameters (Take Profit & Stop Loss) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Take Profit (Target Harga)</label>
-              <input
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="tp" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Take Profit (Target Harga)</Label>
+              <Input
+                id="tp"
                 type="number"
+                onKeyDown={handleNumberKeyDown}
                 value={takeProfit}
                 onChange={(e) => setTakeProfit(e.target.value)}
-                placeholder={selectedAsset === "BTC" ? "Contoh: 75000" : "Contoh: 11000"}
+                placeholder={selectedAsset.type === "stock" ? "Contoh: 11000" : "Contoh: 75000"}
                 disabled={!isPremium}
-                className="block w-full rounded-lg border border-border bg-background py-2 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-brand-green disabled:opacity-50"
+                className="bg-background"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Stop Loss (Batas Pengaman)</label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="sl" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Stop Loss (Batas Pengaman)</Label>
+              <Input
+                id="sl"
                 type="number"
+                onKeyDown={handleNumberKeyDown}
                 value={stopLoss}
                 onChange={(e) => setStopLoss(e.target.value)}
-                placeholder={selectedAsset === "BTC" ? "Contoh: 60000" : "Contoh: 9800"}
+                placeholder={selectedAsset.type === "stock" ? "Contoh: 9800" : "Contoh: 60000"}
                 disabled={!isPremium}
-                className="block w-full rounded-lg border border-border bg-background py-2 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-brand-green disabled:opacity-50"
+                className="bg-background"
               />
             </div>
           </div>
 
           {/* DCA Frequency Select */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Frekuensi Cicil (Dollar-Cost Averaging - DCA)</label>
-            <select
-              value={dca}
-              onChange={(e) => setDca(e.target.value as "off" | "daily" | "weekly" | "monthly")}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Frekuensi Cicil (DCA Alert)</Label>
+            <Select 
+              value={dca} 
+              onValueChange={(val: any) => setDca(val)}
               disabled={!isPremium}
-              className="block w-full rounded-lg border border-border bg-background py-2 px-3 text-sm focus:outline-none focus:border-brand-green disabled:opacity-50"
             >
-              <option value="off">Mati (Off)</option>
-              <option value="daily">Setiap Hari (Daily)</option>
-              <option value="weekly">Setiap Minggu (Weekly)</option>
-              <option value="monthly">Setiap Bulan (Monthly)</option>
-            </select>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Pilih frekuensi DCA" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">Mati (Off)</SelectItem>
+                <SelectItem value="daily">Setiap Hari (Daily)</SelectItem>
+                <SelectItem value="weekly">Setiap Minggu (Weekly)</SelectItem>
+                <SelectItem value="monthly">Setiap Bulan (Monthly)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Status Message */}
-          <AnimatePresence>
-            {successMsg && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 flex items-start gap-2.5 text-xs text-emerald-500 font-medium"
-              >
-                <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{successMsg}</span>
-              </motion.div>
-            )}
+          {successMsg && (
+            <Alert className="bg-emerald-500/10 border-emerald-500/20 text-emerald-500">
+              <CheckCircle className="h-4 w-4 !text-emerald-500" />
+              <AlertTitle>Berhasil Disimpan!</AlertTitle>
+              <AlertDescription>{successMsg}</AlertDescription>
+            </Alert>
+          )}
 
-            {errorMsg && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 flex items-start gap-2.5 text-xs text-destructive font-medium"
-              >
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {errorMsg && (
+            <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
+              <ShieldAlert className="h-4 w-4 !text-destructive" />
+              <AlertTitle>Terjadi Kesalahan</AlertTitle>
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Submit Button */}
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-4">
             <button
               type="submit"
               disabled={isSaving || !isPremium}
-              className="rounded-lg bg-brand-green text-white font-bold py-2.5 px-6 text-xs transition cursor-pointer disabled:opacity-50 hover:bg-opacity-95 shadow-md flex items-center justify-center min-w-[140px]"
+              className="rounded-lg bg-brand-green text-white font-bold py-2.5 px-6 text-sm transition cursor-pointer disabled:opacity-50 hover:bg-opacity-95 shadow-md flex items-center justify-center min-w-[180px]"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="animate-spin h-3.5 w-3.5 mr-1.5" />
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
                   Menyimpan...
                 </>
               ) : (
